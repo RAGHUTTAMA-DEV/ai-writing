@@ -4,8 +4,12 @@ import { Document } from "langchain/document";
 import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import fs from "fs";
 import path from "path";
+import dotenv from "dotenv";
+import { PrismaClient } from '@prisma/client';
 
-// Define the structure for persisted data
+dotenv.config();
+
+const prisma = new PrismaClient();
 interface PersistedData {
   documents: Array<{
     pageContent: string;

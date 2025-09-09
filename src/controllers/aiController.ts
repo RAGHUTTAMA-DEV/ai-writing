@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
-import ragService from '../services/ragService';
 import aiService from '../services/aiService';
+import improvedRAGService from '../services/improvedRAGService';
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 interface AISuggestionRequest {
   projectId: string;
@@ -165,7 +168,12 @@ class AIController {
         return;
       }
 
-      await ragService.addDocument(content, metadata);
+      const userId = (req as any).user?.id;
+      await improvedRAGService.addDocument(content, {
+        ...metadata,
+        userId,
+        timestamp: new Date().toISOString()
+      });
 
       res.json({
         message: 'Document added to RAG system successfully'
@@ -182,6 +190,7 @@ class AIController {
   async addProjectToRAG(req: Request<{}, {}, { projectId: string; content: string }>, res: Response): Promise<void> {
     try {
       const { projectId, content } = req.body;
+      const userId = (req as any).user?.id;
 
       if (!projectId || !content) {
         res.status(400).json({ 
@@ -190,9 +199,25 @@ class AIController {
         return;
       }
 
-      await ragService.addDocument(content, {
+      // Verify project ownership
+      const project = await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          ownerId: userId
+        }
+      });
+
+      if (!project) {
+        res.status(403).json({ message: 'Project not found or access denied' });
+        return;
+      }
+
+      await improvedRAGService.addDocument(content, {
         projectId,
-        type: 'project'
+        userId,
+        projectTitle: project.title,
+        timestamp: new Date().toISOString(),
+        contentType: 'project'
       });
 
       res.json({
@@ -201,15 +226,18 @@ class AIController {
     } catch (error) {
       console.error('Error adding project to RAG system:', error);
       res.status(500).json({ 
-        message: 'Server error while adding project to RAG system' 
+        message: 'Server error while adding project to RAG system',
+        //@ts-ignore
+        error: error.message
       });
     }
   }
 
   // Search RAG system
-  async searchRAG(req: Request<{}, {}, { query: string; limit?: number }>, res: Response): Promise<void> {
+  async searchRAG(req: Request<{}, {}, { query: string; projectId?: string; limit?: number }>, res: Response): Promise<void> {
     try {
-      const { query, limit } = req.body;
+      const { query, projectId, limit } = req.body;
+      const userId = (req as any).user?.id;
 
       if (!query) {
         res.status(400).json({ 
@@ -217,20 +245,32 @@ class AIController {
         });
         return;
       }
-//@ts-ignore
-      const results = await ragService.search(query, limit || 4);
+
+      const searchOptions = {
+        projectId,
+        userId,
+        limit: limit || 4,
+        includeContext: true
+      };
+
+      const searchResults = await improvedRAGService.intelligentSearch(query, searchOptions);
 
       res.json({
         message: 'Search completed successfully',
-        results: results.map(doc => ({
+        query,
+        results: searchResults.results.map(doc => ({
           content: doc.pageContent,
           metadata: doc.metadata
-        }))
+        })),
+        insights: searchResults.projectInsights,
+        totalResults: searchResults.results.length
       });
     } catch (error) {
       console.error('Error searching RAG system:', error);
       res.status(500).json({ 
-        message: 'Server error while searching RAG system' 
+        message: 'Server error while searching RAG system',
+        //@ts-ignore
+        error: error.message
       });
     }
   }

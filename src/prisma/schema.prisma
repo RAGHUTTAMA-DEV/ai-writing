@@ -21,6 +21,8 @@ model User {
   permissions   Permission[]
   versions      ProjectVersion[]
   sessions      Session[]
+  preferences   UserPreferences?
+  conversations ChatConversation[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -47,6 +49,8 @@ model Project {
   owner         User      @relation(fields: [ownerId], references: [id])
   permissions   Permission[]
   versions      ProjectVersion[]
+  contexts      ProjectContext[]
+  conversations ChatConversation[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 }
@@ -88,4 +92,110 @@ enum ProjectRole {
   OWNER
   EDITOR
   VIEWER
+}
+
+// User preferences for AI writing assistance
+model UserPreferences {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  user          User      @relation(fields: [userId], references: [id])
+  writingStyle  String?   // preferred writing style
+  genre         String?   // preferred genre
+  tonePreference String?  // preferred tone
+  themes        String[]  // preferred themes
+  writingGoals  String[]  // writing goals
+  dailyWordGoal Int?      // daily word count goal
+  preferences   Json?     // flexible JSON for additional preferences
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Enhanced project context for better AI understanding
+model ProjectContext {
+  id            String    @id @default(uuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id])
+  contextType   ContextType @default(GENERAL)
+  title         String?
+  genre         String?
+  themes        String[]  @default([])
+  characters    String[]  @default([])
+  plotPoints    String[]  @default([])
+  settings      String[]  @default([])
+  writingStyle  String?
+  toneAnalysis  String?
+  wordCount     Int       @default(0)
+  chapterCount  Int       @default(0)
+  lastAnalyzed  DateTime?
+  metadata      Json?     // flexible JSON for additional context
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([projectId, contextType])
+}
+
+// Chat conversations for better context memory
+model ChatConversation {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  projectId     String?
+  project       Project?  @relation(fields: [projectId], references: [id])
+  title         String?
+  messages      ChatMessage[]
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// Individual chat messages
+model ChatMessage {
+  id              String    @id @default(uuid())
+  conversationId  String
+  conversation    ChatConversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role            MessageRole
+  content         String
+  metadata        Json?     // for storing additional context, suggestions, etc.
+  timestamp       DateTime  @default(now())
+  createdAt       DateTime  @default(now())
+}
+
+// Writing flow questions and templates
+model WritingFlowTemplate {
+  id            String    @id @default(uuid())
+  name          String
+  description   String?
+  questions     String[]  // array of questions
+  category      String?   // fiction, non-fiction, poetry, etc.
+  difficulty    Int       @default(1) // 1-5 difficulty level
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+// User answers to writing flow questions
+model WritingFlowResponse {
+  id            String    @id @default(uuid())
+  userId        String
+  templateId    String
+  projectId     String?
+  answers       Json      // JSON object mapping questions to answers
+  completedAt   DateTime  @default(now())
+  createdAt     DateTime  @default(now())
+}
+
+enum ContextType {
+  GENERAL
+  CHARACTER
+  PLOT
+  SETTING
+  THEME
+  DIALOGUE
+  NARRATIVE
+}
+
+enum MessageRole {
+  USER
+  ASSISTANT
+  SYSTEM
 }

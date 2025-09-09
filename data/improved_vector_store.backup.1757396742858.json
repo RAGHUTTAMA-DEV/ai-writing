@@ -1,0 +1,43 @@
+{
+  "documents": [
+    {
+      "pageContent": "This is the best thor story",
+      "metadata": {
+        "projectId": "317e0827-701b-40a0-a9cf-e866d7b60ccc",
+        "userId": "6bcae10c-a7db-48f7-b68f-64a67f666d45",
+        "projectTitle": "Thor ",
+        "timestamp": "2025-09-09T05:45:29.977Z",
+        "contentType": "plot",
+        "wordCount": 1,
+        "characters": [],
+        "themes": [],
+        "emotions": [],
+        "plotElements": [],
+        "semanticTags": [
+          "short"
+        ],
+        "importance": 5,
+        "projectContext": {
+          "projectId": "317e0827-701b-40a0-a9cf-e866d7b60ccc",
+          "title": "Thor ",
+          "characters": [],
+          "themes": [],
+          "plotPoints": [],
+          "settings": [],
+          "writingStyle": "concise",
+          "toneAnalysis": "neutral",
+          "lastUpdated": "2025-09-09T05:45:26.862Z",
+          "wordCount": 1,
+          "chapterCount": 0
+        },
+        "chunkIndex": 0,
+        "totalChunks": 1,
+        "previousContext": "",
+        "nextContext": "",
+        "relatedChunks": []
+      }
+    }
+  ],
+  "timestamp": "2025-09-09T05:45:30.979Z",
+  "version": "4.0"
+}
