@@ -1,0 +1,91 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  username      String    @unique
+  password      String
+  firstName     String
+  lastName      String
+  bio           String?
+  avatar        String?
+  role          Role      @default(USER)
+  projects      Project[]
+  permissions   Permission[]
+  versions      ProjectVersion[]
+  sessions      Session[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Session {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  token         String    @unique
+  expiresAt     DateTime
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Project {
+  id            String    @id @default(uuid())
+  title         String
+  description   String?
+  format        String    @default("screenplay")
+  type          String    @default("draft")
+  content       String?
+  quickNotes    String?
+  ownerId       String
+  owner         User      @relation(fields: [ownerId], references: [id])
+  permissions   Permission[]
+  versions      ProjectVersion[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Permission {
+  id            String    @id @default(uuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id])
+  userId        String
+  user          User      @relation(fields: [userId], references: [id])
+  role          ProjectRole
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([projectId, userId])
+}
+
+model ProjectVersion {
+  id            String    @id @default(uuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id])
+  content       String?
+  versionNumber Int
+  createdBy     String
+  creator       User      @relation(fields: [createdBy], references: [id])
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([projectId, versionNumber])
+}
+
+enum Role {
+  USER
+  ADMIN
+  EDITOR
+}
+
+enum ProjectRole {
+  OWNER
+  EDITOR
+  VIEWER
+}
