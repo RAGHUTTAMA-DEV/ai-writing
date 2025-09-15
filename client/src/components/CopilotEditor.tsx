@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { Button } from "@/components/ui/button";
-import { Save, Lightbulb, Zap } from 'lucide-react';
+import { Icon, LoadingIcon } from "@/components/ui/icon";
 import apiService from '../services/api';
 
 interface CopilotEditorProps {
@@ -27,72 +26,52 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
   const [suggestion, setSuggestion] = useState<AutocompleteSuggestion | null>(null);
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false);
   const [showSuggestion, setShowSuggestion] = useState(false);
-  const [cursorPosition, setCursorPosition] = useState(0);
+  
+  // AI Assistant state (Cursor-style)
+  const [aiAssistant, setAiAssistant] = useState({
+    isOpen: false,
+    selectedText: '',
+    selectionStart: 0,
+    selectionEnd: 0,
+    query: '',
+    isProcessing: false,
+    suggestions: [] as string[]
+  });
+  const [showStatusBar, setShowStatusBar] = useState(false);
+  const [isTyping, setIsTyping] = useState(false);
   
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const overlayRef = useRef<HTMLDivElement>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const suggestionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const statusBarTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Common spelling mistakes and corrections
-  const spellCorrections: Record<string, string> = {
-    'teh': 'the',
-    'adn': 'and',
-    'recieve': 'receive',
-    'seperate': 'separate',
-    'definately': 'definitely',
-    'occured': 'occurred',
-    'begining': 'beginning',
-    'writting': 'writing',
-    'thier': 'their',
-    'freind': 'friend',
-    'becuase': 'because',
-    'acheive': 'achieve',
-    'beleive': 'believe',
-    'neccessary': 'necessary',
-    'tommorrow': 'tomorrow',
-    'accomodate': 'accommodate',
-    'embarass': 'embarrass',
-    'occassion': 'occasion',
-    'priviledge': 'privilege',
-    'recomend': 'recommend'
-  };
-
-  // Check for spelling mistakes in the last word
-  const checkSpelling = useCallback((text: string, cursorPos: number): AutocompleteSuggestion | null => {
-    const beforeCursor = text.substring(0, cursorPos);
-    const words = beforeCursor.split(/\s+/);
-    const lastWord = words[words.length - 1];
-    
-    if (lastWord && lastWord.length > 2) {
-      const correction = spellCorrections[lastWord.toLowerCase()];
-      if (correction) {
-        const wordStart = beforeCursor.lastIndexOf(lastWord);
-        return {
-          text: correction,
-          position: wordStart,
-          type: 'spelling'
-        };
+  // Auto-hide status bar
+  useEffect(() => {
+    if (isTyping || isLoadingSuggestion || showSuggestion || isSaving) {
+      setShowStatusBar(true);
+      
+      if (statusBarTimeoutRef.current) {
+        clearTimeout(statusBarTimeoutRef.current);
       }
+      
+      statusBarTimeoutRef.current = setTimeout(() => {
+        if (!isLoadingSuggestion && !showSuggestion && !isSaving) {
+          setShowStatusBar(false);
+        }
+      }, 3000);
     }
     
-    return null;
-  }, []);
+    return () => {
+      if (statusBarTimeoutRef.current) {
+        clearTimeout(statusBarTimeoutRef.current);
+      }
+    };
+  }, [isTyping, isLoadingSuggestion, showSuggestion, isSaving]);
 
-  // Debounced autocomplete function
+  // Removed hard-coded spelling corrections - now handled by AI assistant
+  // Debounced autocomplete function  
   const debouncedAutocomplete = useCallback(async (text: string, cursorPos: number) => {
-    if (text.length < 10) return;
-    
-    // First check for spelling mistakes
-    const spellingSuggestion = checkSpelling(text, cursorPos);
-    if (spellingSuggestion) {
-      setSuggestion(spellingSuggestion);
-      setShowSuggestion(true);
-      return;
-    }
-    
-    // Then get AI autocomplete if we have a project ID
-    if (!projectId) return;
+    if (text.length < 10 || !projectId) return;
     
     try {
       setIsLoadingSuggestion(true);
@@ -111,7 +90,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     } finally {
       setIsLoadingSuggestion(false);
     }
-  }, [projectId, checkSpelling]);
+  }, [projectId]);
 
   // Handle text changes
   const handleChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
@@ -120,7 +99,15 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     
     setContent(newContent);
     onChange(newContent);
-    setCursorPosition(cursorPos);
+    setIsTyping(true);
+    
+    // Clear typing indicator after pause
+    if (typingTimeoutRef.current) {
+      clearTimeout(typingTimeoutRef.current);
+    }
+    typingTimeoutRef.current = setTimeout(() => {
+      setIsTyping(false);
+    }, 1000);
     
     // Hide current suggestion when typing
     setShowSuggestion(false);
@@ -130,27 +117,36 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     if (timeoutRef.current) {
       clearTimeout(timeoutRef.current);
     }
-    if (suggestionTimeoutRef.current) {
-      clearTimeout(suggestionTimeoutRef.current);
-    }
     
-    // Quick spell check (immediate)
-    const spellingSuggestion = checkSpelling(newContent, cursorPos);
-    if (spellingSuggestion) {
-      suggestionTimeoutRef.current = setTimeout(() => {
-        setSuggestion(spellingSuggestion);
-        setShowSuggestion(true);
-      }, 500); // Show spelling suggestions quickly
-    } else {
-      // Set timeout for AI autocomplete (4 seconds)
-      timeoutRef.current = setTimeout(() => {
-        debouncedAutocomplete(newContent, cursorPos);
-      }, 4000);
-    }
+    // Set timeout for AI autocomplete (4 seconds)
+    timeoutRef.current = setTimeout(() => {
+      debouncedAutocomplete(newContent, cursorPos);
+    }, 4000);
   };
 
   // Handle key presses
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Ctrl+S to save
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      handleSave();
+      return;
+    }
+
+    // Ctrl+K to open AI assistant (Cursor-style)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      openAIAssistant();
+      return;
+    }
+
+    // Escape to close AI assistant
+    if (e.key === 'Escape' && aiAssistant.isOpen) {
+      e.preventDefault();
+      closeAIAssistant();
+      return;
+    }
+
     if (e.key === 'Tab' && suggestion && showSuggestion) {
       e.preventDefault();
       acceptSuggestion();
@@ -171,8 +167,6 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       }
     }
   };
-
-  // Accept the suggestion
   const acceptSuggestion = () => {
     if (!suggestion || !textareaRef.current) return;
     
@@ -181,7 +175,6 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     let newCursorPos: number;
     
     if (suggestion.type === 'spelling') {
-      // Replace the misspelled word
       const beforeWord = content.substring(0, suggestion.position);
       const afterWord = content.substring(suggestion.position);
       const oldWordMatch = afterWord.match(/^\w+/);
@@ -190,7 +183,6 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       newContent = beforeWord + suggestion.text + content.substring(suggestion.position + oldWordLength);
       newCursorPos = suggestion.position + suggestion.text.length;
     } else {
-      // Insert autocomplete suggestion
       const beforeSuggestion = content.substring(0, suggestion.position);
       const afterSuggestion = content.substring(suggestion.position);
       newContent = beforeSuggestion + suggestion.text + afterSuggestion;
@@ -202,7 +194,6 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     setSuggestion(null);
     setShowSuggestion(false);
     
-    // Set cursor position after the inserted suggestion
     setTimeout(() => {
       textarea.setSelectionRange(newCursorPos, newCursorPos);
       textarea.focus();
@@ -219,7 +210,6 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
   const handleSelectionChange = () => {
     if (textareaRef.current) {
       const cursorPos = textareaRef.current.selectionStart;
-      setCursorPosition(cursorPos);
       
       if (suggestion && Math.abs(cursorPos - suggestion.position) > 10) {
         setShowSuggestion(false);
@@ -237,6 +227,81 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     }
   };
 
+  // AI Assistant Functions (Cursor-style)
+  const openAIAssistant = () => {
+    if (!textareaRef.current) return;
+    
+    const textarea = textareaRef.current;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selectedText = content.substring(start, end);
+    
+    setAiAssistant({
+      isOpen: true,
+      selectedText,
+      selectionStart: start,
+      selectionEnd: end,
+      query: '',
+      isProcessing: false,
+      suggestions: []
+    });
+  };
+
+  const closeAIAssistant = () => {
+    setAiAssistant(prev => ({ ...prev, isOpen: false, query: '', suggestions: [], isProcessing: false }));
+  };
+
+  const handleAIQuery = async () => {
+    if (!aiAssistant.query.trim() || !projectId) return;
+    
+    setAiAssistant(prev => ({ ...prev, isProcessing: true, suggestions: [] }));
+    
+    try {
+      const contextText = aiAssistant.selectedText || content.slice(Math.max(0, aiAssistant.selectionStart - 100), aiAssistant.selectionEnd + 100);
+      const prompt = `Selected text: "${aiAssistant.selectedText}"
+      Context: "${contextText}"
+      User request: ${aiAssistant.query}
+      
+      Please provide suggestions to modify the selected text based on the user's request. Provide 2-3 different options.`;
+      
+      const response = await apiService.generateAutocomplete(prompt, aiAssistant.selectionStart, projectId);
+      
+      // Parse response into suggestions (assume response contains multiple options)
+      const suggestions = response.suggestion ? [response.suggestion] : [];
+      
+      setAiAssistant(prev => ({ 
+        ...prev, 
+        isProcessing: false, 
+        suggestions 
+      }));
+    } catch (error) {
+      console.error('AI query failed:', error);
+      setAiAssistant(prev => ({ ...prev, isProcessing: false }));
+    }
+  };
+
+  const applySuggestion = (suggestionText: string) => {
+    if (!textareaRef.current) return;
+    
+    const beforeText = content.substring(0, aiAssistant.selectionStart);
+    const afterText = content.substring(aiAssistant.selectionEnd);
+    const newContent = beforeText + suggestionText + afterText;
+    
+    setContent(newContent);
+    onChange(newContent);
+    
+    // Update cursor position
+    const newCursorPos = aiAssistant.selectionStart + suggestionText.length;
+    setTimeout(() => {
+      if (textareaRef.current) {
+        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+        textareaRef.current.focus();
+      }
+    }, 0);
+    
+    closeAIAssistant();
+  };
+
   // Calculate text metrics for positioning
   const getTextMetrics = useCallback(() => {
     if (!textareaRef.current) return { lineHeight: 24, charWidth: 8 };
@@ -245,7 +310,6 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     const style = window.getComputedStyle(textarea);
     const lineHeight = parseInt(style.lineHeight) || 24;
     
-    // Create a temporary element to measure character width
     const temp = document.createElement('span');
     temp.style.font = style.font;
     temp.style.visibility = 'hidden';
@@ -265,14 +329,11 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     const textarea = textareaRef.current;
     const { lineHeight, charWidth } = getTextMetrics();
     
-    // Calculate position based on suggestion position
     const beforeText = content.substring(0, suggestion.position);
     const lines = beforeText.split('\n');
     const currentLine = lines.length - 1;
     const currentColumn = lines[lines.length - 1].length;
     
-    // Account for textarea padding and border
-    const textareaRect = textarea.getBoundingClientRect();
     const textareaStyle = window.getComputedStyle(textarea);
     const paddingLeft = parseInt(textareaStyle.paddingLeft) || 16;
     const paddingTop = parseInt(textareaStyle.paddingTop) || 16;
@@ -280,7 +341,6 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     const top = currentLine * lineHeight + paddingTop;
     const left = currentColumn * charWidth + paddingLeft;
     
-    // Different styling based on suggestion type
     const getSuggestionStyle = () => {
       const baseStyle = {
         position: 'absolute' as const,
@@ -299,23 +359,25 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
         case 'spelling':
           return {
             ...baseStyle,
-            color: '#ef4444',
+            color: '#dc2626',
             backgroundColor: '#fef2f2',
-            padding: '1px 3px',
-            borderRadius: '3px',
+            padding: '2px 6px',
+            borderRadius: '4px',
             border: '1px solid #fecaca',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
           };
         case 'autocomplete':
           return {
             ...baseStyle,
             color: '#6b7280',
-            opacity: 0.7,
+            opacity: 0.6,
+            fontStyle: 'italic',
           };
         default:
           return {
             ...baseStyle,
             color: '#6b7280',
-            opacity: 0.6,
+            opacity: 0.5,
           };
       }
     };
@@ -333,9 +395,6 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
-      if (suggestionTimeoutRef.current) {
-        clearTimeout(suggestionTimeoutRef.current);
-      }
     };
   }, []);
 
@@ -344,39 +403,44 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     setContent(initialContent);
   }, [initialContent]);
 
+  const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
+
   return (
-    <div className="space-y-4">
-      <div className="flex justify-between items-center">
-        <div className="flex items-center space-x-2">
-          {isLoadingSuggestion && (
-            <div className="flex items-center text-sm text-blue-600">
-              <Zap className="w-4 h-4 mr-1 animate-pulse" />
-              AI thinking...
-            </div>
-          )}
-          {showSuggestion && suggestion && (
-            <div className="flex items-center text-sm">
-              {suggestion.type === 'spelling' ? (
-                <div className="flex items-center text-red-600">
-                  <span className="w-4 h-4 mr-1">🔤</span>
-                  Spelling correction available - Press Tab to fix
-                </div>
-              ) : (
-                <div className="flex items-center text-blue-600">
-                  <Lightbulb className="w-4 h-4 mr-1" />
-                  AI suggestion - Press Tab to accept, Esc to dismiss
-                </div>
-              )}
-            </div>
-          )}
+    <div className="h-full flex flex-col bg-white relative overflow-hidden">
+      {/* Floating Status Indicators - Minimal and auto-hiding */}
+      {(isLoadingSuggestion || showSuggestion || isSaving) && (
+        <div className="absolute top-6 right-6 z-20 animate-in fade-in duration-300">
+          <div className="bg-white/90 backdrop-blur-sm border border-gray-200/60 rounded-xl px-4 py-2.5 shadow-lg">
+            {isSaving && (
+              <div className="flex items-center space-x-2 text-emerald-700">
+                <LoadingIcon size="xs" className="animate-spin" />
+                <span className="text-sm font-medium">Saving</span>
+              </div>
+            )}
+            {isLoadingSuggestion && (
+              <div className="flex items-center space-x-2 text-blue-600">
+                <LoadingIcon size="xs" className="animate-spin" />
+                <span className="text-sm font-medium">AI thinking</span>
+              </div>
+            )}
+            {showSuggestion && suggestion && (
+              <div className="flex items-center space-x-2">
+                <Icon 
+                  name={suggestion.type === 'spelling' ? 'alert-circle' : 'lightbulb'} 
+                  size="xs" 
+                  className={suggestion.type === 'spelling' ? 'text-red-500' : 'text-amber-500'} 
+                />
+                <span className="text-sm font-medium text-gray-700">
+                  Tab to {suggestion.type === 'spelling' ? 'fix' : 'accept'}
+                </span>
+              </div>
+            )}
+          </div>
         </div>
-        <Button onClick={handleSave} disabled={isSaving} className="flex items-center">
-          <Save className="mr-2 h-4 w-4" />
-          {isSaving ? 'Saving...' : 'Save'}
-        </Button>
-      </div>
-      
-      <div className="relative">
+      )}
+
+      {/* Full-screen Writing Area */}
+      <div className="flex-1 relative">
         <textarea
           ref={textareaRef}
           value={content}
@@ -384,42 +448,163 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
           onKeyDown={handleKeyDown}
           onSelect={handleSelectionChange}
           onMouseUp={handleSelectionChange}
-          className="w-full h-96 p-4 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm leading-6 resize-none bg-white"
-          placeholder="Start writing your story here..."
-          spellCheck={false} // We handle our own spell checking
+          className="w-full h-full px-12 py-16 md:px-20 md:py-20 border-0 resize-none outline-none bg-white text-gray-900 placeholder-gray-400 focus:placeholder-gray-300 transition-all duration-300"
+          placeholder="Begin your story..."
+          spellCheck={false}
           style={{
-            lineHeight: '24px',
-            letterSpacing: '0.5px',
+            fontFamily: 'Georgia, "Times New Roman", Times, serif',
+            fontSize: '20px',
+            lineHeight: '1.75',
+            letterSpacing: '0.01em',
           }}
         />
+        
+        {/* Floating Suggestion Overlay */}
         {renderSuggestionOverlay()}
       </div>
-      
-      <div className="text-xs text-gray-500 space-y-1">
-        <div className="flex items-center justify-between">
-          <div>
-            Words: {content.split(/\s+/).filter(word => word.length > 0).length} | 
-            Characters: {content.length} | 
-            Lines: {content.split('\n').length}
-          </div>
-          <div className="text-right">
-            Cursor: {cursorPosition}
+
+      {/* Cursor-style AI Assistant Modal */}
+      {aiAssistant.isOpen && (
+        <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[80vh] overflow-hidden">
+            {/* Header */}
+            <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-purple-50">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 bg-blue-100 rounded-lg">
+                    <Icon name="zap" size="sm" className="text-blue-600" />
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-gray-900">AI Assistant</h3>
+                    <p className="text-sm text-gray-600">
+                      {aiAssistant.selectedText ? 
+                        `Selected: "${aiAssistant.selectedText.substring(0, 50)}${aiAssistant.selectedText.length > 50 ? '...' : ''}"` :
+                        'Ask AI to help with your writing'
+                      }
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={closeAIAssistant}
+                  className="p-2 hover:bg-white/80 rounded-lg transition-colors"
+                >
+                  <Icon name="x" size="sm" className="text-gray-500" />
+                </button>
+              </div>
+            </div>
+
+            {/* Input */}
+            <div className="p-6">
+              <div className="space-y-4">
+                <div>
+                  <label className="text-sm font-medium text-gray-700 block mb-2">
+                    What would you like me to do?
+                  </label>
+                  <div className="flex space-x-3">
+                    <input
+                      type="text"
+                      value={aiAssistant.query}
+                      onChange={(e) => setAiAssistant(prev => ({ ...prev, query: e.target.value }))}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !aiAssistant.isProcessing) {
+                          handleAIQuery();
+                        }
+                      }}
+                      placeholder="e.g., 'Fix spelling', 'Make it more formal', 'Add more details'..."
+                      className="flex-1 px-4 py-3 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none"
+                      autoFocus
+                    />
+                    <button
+                      onClick={handleAIQuery}
+                      disabled={!aiAssistant.query.trim() || aiAssistant.isProcessing}
+                      className="px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white rounded-xl font-medium transition-colors flex items-center space-x-2"
+                    >
+                      {aiAssistant.isProcessing ? (
+                        <>
+                          <LoadingIcon size="sm" className="animate-spin" />
+                          <span>Processing...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Icon name="send" size="sm" />
+                          <span>Ask AI</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Quick Actions */}
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    'Fix spelling and grammar',
+                    'Make it more professional',
+                    'Simplify the language',
+                    'Add more details',
+                    'Make it shorter',
+                    'Improve clarity'
+                  ].map((quickAction) => (
+                    <button
+                      key={quickAction}
+                      onClick={() => setAiAssistant(prev => ({ ...prev, query: quickAction }))}
+                      className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition-colors"
+                    >
+                      {quickAction}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* Suggestions */}
+            {aiAssistant.suggestions.length > 0 && (
+              <div className="px-6 pb-6">
+                <div className="space-y-3">
+                  <h4 className="font-medium text-gray-900">Suggestions:</h4>
+                  {aiAssistant.suggestions.map((suggestion, index) => (
+                    <div key={index} className="border border-gray-200 rounded-xl p-4 hover:border-blue-300 transition-colors group">
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1 pr-4">
+                          <p className="text-gray-800 leading-relaxed">{suggestion}</p>
+                        </div>
+                        <button
+                          onClick={() => applySuggestion(suggestion)}
+                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors opacity-0 group-hover:opacity-100"
+                        >
+                          Apply
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
-        <div className="flex items-center space-x-4 flex-wrap">
-          <span className="flex items-center">
-            <Zap className="w-3 h-3 mr-1" />
-            AI suggestions after 4s pause
-          </span>
-          <span className="flex items-center">
-            ⌨️ Tab to accept
-          </span>
-          <span className="flex items-center">
-            🔤 Smart spell check
-          </span>
-          <span className="flex items-center">
-            ➡️ Right arrow also accepts AI suggestions
-          </span>
+      )}
+
+      {/* Auto-hiding Status Bar */}
+      <div className={`
+        transition-all duration-500 ease-in-out border-t border-gray-100 bg-white/80 backdrop-blur-sm
+        ${showStatusBar ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0'}
+      `}>
+        <div className="flex items-center justify-between px-12 py-4 text-sm">
+          <div className="flex items-center space-x-8 text-gray-600">
+            <span className="font-medium">{wordCount} {wordCount === 1 ? 'word' : 'words'}</span>
+            <span>{content.length} characters</span>
+            <span>{content.split('\n').length} lines</span>
+          </div>
+          
+          <div className="flex items-center space-x-6 text-xs text-gray-500">
+            <div className="flex items-center space-x-1.5">
+              <Icon name="zap" size="xs" className="text-amber-500" />
+              <span>AI assists after pause • Ctrl+K for AI help</span>
+            </div>
+            <div className="flex items-center space-x-1.5">
+              <kbd className="px-2 py-1 bg-gray-100 rounded text-xs font-mono border">⌘S</kbd>
+              <span>save</span>
+            </div>
+          </div>
         </div>
       </div>
     </div>

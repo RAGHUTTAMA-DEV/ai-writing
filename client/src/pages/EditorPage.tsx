@@ -1,26 +1,45 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Button } from '../components/ui/button';
-import { Badge } from '../components/ui/badge';
 import { CopilotEditor } from '../components/CopilotEditor';
-import { 
-  BookOpen, 
-  Save, 
-  Clock,
-  FileText,
-  RefreshCw
-} from 'lucide-react';
+import { BookOpen, Circle } from 'lucide-react';
 
 export const EditorPage: React.FC = () => {
   const {
     activeProject,
-    updateProject,
-    loading: projectsLoading
+    updateProject
   } = useProjectStore();
 
-  const [lastSaved, setLastSaved] = useState<Date | null>(null);
+  const [, setLastSaved] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [isHeaderVisible, setIsHeaderVisible] = useState(false);
+  const headerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Show header temporarily when there are changes or on hover
+  useEffect(() => {
+    if (hasUnsavedChanges) {
+      setIsHeaderVisible(true);
+      
+      // Clear existing timeout
+      if (headerTimeoutRef.current) {
+        clearTimeout(headerTimeoutRef.current);
+      }
+      
+      // Hide header after 3 seconds if no unsaved changes
+      headerTimeoutRef.current = setTimeout(() => {
+        if (!hasUnsavedChanges) {
+          setIsHeaderVisible(false);
+        }
+      }, 3000);
+    } else {
+      setIsHeaderVisible(false);
+    }
+
+    return () => {
+      if (headerTimeoutRef.current) {
+        clearTimeout(headerTimeoutRef.current);
+      }
+    };
+  }, [hasUnsavedChanges]);
 
   // Auto-save functionality
   useEffect(() => {
@@ -31,9 +50,9 @@ export const EditorPage: React.FC = () => {
 
       return () => clearTimeout(autoSaveTimer);
     }
-  }, [hasUnsavedChanges, activeProject]);
+  }, [hasUnsavedChanges, activeProject, handleSave]);
 
-  const handleSave = async (content: string) => {
+  const handleSave = useCallback(async (content: string) => {
     if (activeProject) {
       try {
         await updateProject(activeProject.id, { content });
@@ -45,7 +64,7 @@ export const EditorPage: React.FC = () => {
         alert('Failed to save content');
       }
     }
-  };
+  }, [activeProject, updateProject]);
 
   const handleContentChange = (content: string) => {
     if (activeProject) {
@@ -57,71 +76,73 @@ export const EditorPage: React.FC = () => {
 
   if (!activeProject) {
     return (
-      <Card>
-        <CardContent className="flex items-center justify-center h-64">
-          <div className="text-center">
-            <BookOpen className="h-16 w-16 mx-auto mb-4 text-gray-300" />
-            <p className="text-gray-500 text-lg mb-2">No project selected</p>
-            <p className="text-gray-400">Select a project from the sidebar to start writing</p>
+      <div className="h-screen flex items-center justify-center bg-gray-50">
+        <div className="text-center max-w-md mx-auto px-6">
+          <div className="w-16 h-16 mx-auto mb-6 flex items-center justify-center rounded-full bg-gray-100">
+            <BookOpen className="w-8 h-8 text-gray-400" />
           </div>
-        </CardContent>
-      </Card>
+          <h2 className="text-2xl font-semibold text-gray-900 mb-3">
+            No project selected
+          </h2>
+          <p className="text-gray-600 leading-relaxed">
+            Select a project from the sidebar to start writing your story
+          </p>
+        </div>
+      </div>
     );
   }
 
+  const wordCount = (activeProject.content || '').split(/\s+/).filter(word => word.length > 0).length;
+
   return (
-    <div className="space-y-4">
-      {/* Editor Header */}
-      <Card>
-        <CardHeader>
+    <div className="h-screen flex flex-col bg-white">
+      {/* Minimal Header - Auto-hides for distraction-free writing */}
+      <div 
+        className={`
+          transition-all duration-500 ease-in-out border-b border-gray-100 bg-white/95 backdrop-blur-sm
+          ${isHeaderVisible || hasUnsavedChanges ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}
+        `}
+        onMouseEnter={() => setIsHeaderVisible(true)}
+        onMouseLeave={() => {
+          if (!hasUnsavedChanges) {
+            headerTimeoutRef.current = setTimeout(() => {
+              setIsHeaderVisible(false);
+            }, 1000);
+          }
+        }}
+      >
+        <div className="px-8 py-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <BookOpen className="h-5 w-5 text-blue-600" />
-              <CardTitle>{activeProject.title}</CardTitle>
-              {hasUnsavedChanges && (
-                <Badge variant="outline" className="text-xs text-orange-600">
-                  Unsaved Changes
-                </Badge>
-              )}
-              {lastSaved && !hasUnsavedChanges && (
-                <Badge variant="outline" className="text-xs text-green-600">
-                  <Save className="w-3 h-3 mr-1" />
-                  Saved
-                </Badge>
-              )}
+            <div className="flex items-center space-x-4">
+              <BookOpen className="w-5 h-5 text-gray-400" />
+              <h1 className="text-xl font-medium text-gray-900 truncate max-w-md">
+                {activeProject.title}
+              </h1>
+              <div className="h-4 w-px bg-gray-300" />
+              <span className="text-sm text-gray-500 font-medium">
+                {wordCount} {wordCount === 1 ? 'word' : 'words'}
+              </span>
             </div>
             
-            <div className="flex items-center space-x-2">
-              {lastSaved && (
-                <span className="text-xs text-gray-500">
-                  Last saved: {lastSaved.toLocaleTimeString()}
-                </span>
-              )}
-              <Button 
-                onClick={() => handleSave(activeProject.content || '')}
-                disabled={!hasUnsavedChanges || projectsLoading}
-                size="sm"
-                className="flex items-center"
-              >
-                {projectsLoading ? (
-                  <RefreshCw className="mr-1 h-4 w-4 animate-spin" />
-                ) : (
-                  <Save className="mr-1 h-4 w-4" />
-                )}
-                Save
-              </Button>
-            </div>
+            {hasUnsavedChanges && (
+              <div className="flex items-center space-x-2 text-amber-700 bg-amber-100 px-4 py-2 rounded-full animate-pulse">
+                <Circle className="w-2 h-2 fill-current" />
+                <span className="text-sm font-medium">Auto-saving...</span>
+              </div>
+            )}
           </div>
-        </CardHeader>
-        <CardContent>
-          <CopilotEditor 
-            initialContent={activeProject.content || ''} 
-            onSave={handleSave}
-            onChange={handleContentChange}
-            projectId={activeProject.id}
-          />
-        </CardContent>
-      </Card>
+        </div>
+      </div>
+
+      {/* Full-screen Editor with maximum space */}
+      <div className="flex-1 min-h-0 relative">
+        <CopilotEditor
+          initialContent={activeProject.content || ''}
+          onSave={handleSave}
+          onChange={handleContentChange}
+          projectId={activeProject.id}
+        />
+      </div>
     </div>
   );
 };

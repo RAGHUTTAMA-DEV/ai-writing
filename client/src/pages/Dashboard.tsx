@@ -2,7 +2,6 @@ import React, { useState, useEffect } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
 import { useAIStore } from '../store/useAIStore';
 import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '../components/ui/tabs';
 import { CopilotEditor } from '../components/CopilotEditor';
 import { AIToolsPanel } from '../components/AI/AIToolsPanel';
 import { ChatbotPanel } from '../components/AI/ChatbotPanel';
@@ -10,16 +9,7 @@ import { RAGSearchPanel } from '../components/AI/RAGSearchPanel';
 import { AnalyticsPanel } from '../components/AI/AnalyticsPanel';
 import { WelcomeScreen } from '../components/Dashboard/WelcomeScreen';
 import { PreferencesPage } from './PreferencesPage';
-import { 
-  FileText, 
-  Zap, 
-  MessageCircle, 
-  Database, 
-  BarChart3,
-  BookOpen,
-  Sparkles,
-  Settings
-} from 'lucide-react';
+import { Icon } from '../components/ui/icon';
 
 interface DashboardProps {
   initialTab?: string;
@@ -29,7 +19,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
   const { 
     activeProject, 
     updateProject, 
+    //@ts-ignore
     hasUnsavedChanges, 
+    //@ts-ignore
     setHasUnsavedChanges 
   } = useProjectStore();
   
@@ -65,109 +57,160 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
     return <WelcomeScreen />;
   }
 
+  const navigationItems = [
+    {
+      id: 'editor',
+      label: 'Editor',
+      icon: 'file-text',
+      gradient: 'from-indigo-500 to-purple-600'
+    },
+    {
+      id: 'ai-tools',
+      label: 'AI Tools',
+      icon: 'zap',
+      gradient: 'from-yellow-400 to-orange-500'
+    },
+    {
+      id: 'chatbot',
+      label: 'Chat',
+      icon: 'message-circle',
+      gradient: 'from-green-400 to-blue-500'
+    },
+    {
+      id: 'rag',
+      label: 'Search',
+      icon: 'database',
+      gradient: 'from-purple-400 to-pink-500'
+    },
+    {
+      id: 'analytics',
+      label: 'Analytics',
+      icon: 'bar-chart',
+      gradient: 'from-red-400 to-pink-500'
+    },
+    {
+      id: 'preferences',
+      label: 'Settings',
+      icon: 'settings',
+      gradient: 'from-gray-600 to-gray-800'
+    }
+  ];
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'editor':
+        return (
+          <div className="h-full">
+            <CopilotEditor
+              initialContent={activeProject.content || ''}
+              onSave={handleSave}
+              onChange={handleContentChange}
+              projectId={activeProject.id}
+            />
+          </div>
+        );
+      case 'ai-tools':
+        return <AIToolsPanel projectId={activeProject.id} />;
+      case 'chatbot':
+        return <ChatbotPanel projectId={activeProject.id} />;
+      case 'rag':
+        return <RAGSearchPanel projectId={activeProject.id} />;
+      case 'analytics':
+        return <AnalyticsPanel projectId={activeProject.id} />;
+      case 'preferences':
+        return <PreferencesPage />;
+      default:
+        return null;
+    }
+  };
+
   return (
-    <div className="h-full flex flex-col">
-      {/* Project Header */}
-      <div className="bg-white border-b px-6 py-4">
-        <div className="flex items-center justify-between">
+    <div className="h-screen flex bg-gray-50">
+      {/* Sidebar Navigation */}
+      <div className="w-20 lg:w-64 bg-white border-r border-gray-200 flex flex-col">
+        {/* Logo/Brand Area */}
+        <div className="p-4 lg:p-6 border-b border-gray-100">
           <div className="flex items-center space-x-3">
-            <div className="p-2 bg-blue-100 rounded-lg">
-              <BookOpen className="h-5 w-5 text-blue-600" />
-            </div>
-            <div>
-              <h2 className="text-xl font-semibold text-gray-900">
-                {activeProject.title}
-              </h2>
-              <p className="text-sm text-gray-500">
-                {activeProject.type} • {activeProject.format}
-              </p>
+            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+              <Icon name="sparkles" size="sm" className="text-white" />
             </div>
           </div>
-          
-          <div className="flex items-center space-x-2">
-            {hasUnsavedChanges && (
-              <span className="text-sm text-orange-600 flex items-center">
-                <div className="w-2 h-2 bg-orange-500 rounded-full mr-2"></div>
-                Unsaved changes
+        </div>
+
+        {/* Navigation Items */}
+        <nav className="flex-1 p-3 lg:p-4 space-y-2">
+          {navigationItems.map((item) => (
+            <button
+              key={item.id}
+              onClick={() => setActiveTab(item.id)}
+              className={`
+                w-full group relative flex items-center space-x-3 px-3 py-3 lg:px-4 lg:py-3 
+                rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-lg
+                ${activeTab === item.id 
+                  ? `bg-gradient-to-r ${item.gradient} text-white shadow-lg` 
+                  : 'text-gray-600 hover:bg-gray-100'
+                }
+              `}
+            >
+              {/* Active indicator */}
+              {activeTab === item.id && (
+                <div className="absolute -left-1 top-1/2 -translate-y-1/2 w-1 h-8 bg-white rounded-full lg:hidden" />
+              )}
+              
+              {/* Icon */}
+              <div className={`
+                flex-shrink-0 w-10 h-10 lg:w-8 lg:h-8 flex items-center justify-center rounded-lg transition-all duration-300
+                ${activeTab === item.id ? 'bg-white/20' : 'bg-gray-100 group-hover:bg-white'}
+              `}>
+                <Icon 
+                  name={item.icon as any} 
+                  size="sm" 
+                  className={activeTab === item.id ? 'text-white' : 'text-gray-600 group-hover:text-gray-800'} 
+                />
+              </div>
+              
+              {/* Label */}
+              <span className={`
+                hidden lg:block text-sm font-semibold truncate transition-colors duration-300
+                ${activeTab === item.id ? 'text-white' : 'text-gray-700 group-hover:text-gray-900'}
+              `}>
+                {item.label}
               </span>
-            )}
+
+              {/* Hover effect */}
+              <div className={`
+                absolute inset-0 rounded-xl transition-opacity duration-300 pointer-events-none
+                bg-gradient-to-r ${item.gradient} opacity-0 group-hover:opacity-10
+                ${activeTab === item.id ? 'opacity-0' : ''}
+              `} />
+            </button>
+          ))}
+        </nav>
+
+        {/* Project Info */}
+        <div className="p-3 lg:p-4 border-t border-gray-100">
+          <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-xl">
+            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+              <Icon name="book-open" size="xs" className="text-white" />
+            </div>
+            <div className="hidden lg:block min-w-0 flex-1">
+              <p className="text-sm font-medium text-gray-900 truncate">{activeProject.title}</p>
+              <p className="text-xs text-gray-500">
+                {(activeProject.content || '').split(/\s+/).filter(word => word.length > 0).length} words
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Main Content */}
-      <div className="flex-1 bg-gray-50">
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
-          <div className="bg-white border-b">
-            <TabsList className="ml-6 mt-4">
-              <TabsTrigger value="editor" className="flex items-center space-x-2">
-                <FileText className="h-4 w-4" />
-                <span>Editor</span>
-              </TabsTrigger>
-              <TabsTrigger value="ai-tools" className="flex items-center space-x-2">
-                <Zap className="h-4 w-4" />
-                <span>AI Tools</span>
-              </TabsTrigger>
-              <TabsTrigger value="chatbot" className="flex items-center space-x-2">
-                <MessageCircle className="h-4 w-4" />
-                <span>AI Chat</span>
-              </TabsTrigger>
-              <TabsTrigger value="rag" className="flex items-center space-x-2">
-                <Database className="h-4 w-4" />
-                <span>Smart Search</span>
-              </TabsTrigger>
-              <TabsTrigger value="analytics" className="flex items-center space-x-2">
-                <BarChart3 className="h-4 w-4" />
-                <span>Analytics</span>
-              </TabsTrigger>
-              <TabsTrigger value="preferences" className="flex items-center space-x-2">
-                <Settings className="h-4 w-4" />
-                <span>Preferences</span>
-              </TabsTrigger>
-            </TabsList>
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {/* Content */}
+        <main className="flex-1 overflow-hidden">
+          <div className="h-full">
+            {renderContent()}
           </div>
-
-          <div className="flex-1 p-6">
-            <TabsContent value="editor" className="h-full mt-0">
-              <Card className="h-full">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2">
-                    <Sparkles className="h-5 w-5 text-blue-600" />
-                    <span>AI-Powered Editor</span>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="h-full">
-                  <CopilotEditor
-                    initialContent={activeProject.content || ''}
-                    onSave={handleSave}
-                    onChange={handleContentChange}
-                    projectId={activeProject.id}
-                  />
-                </CardContent>
-              </Card>
-            </TabsContent>
-
-            <TabsContent value="ai-tools" className="h-full mt-0">
-              <AIToolsPanel projectId={activeProject.id} />
-            </TabsContent>
-
-            <TabsContent value="chatbot" className="h-full mt-0">
-              <ChatbotPanel projectId={activeProject.id} />
-            </TabsContent>
-
-            <TabsContent value="rag" className="h-full mt-0">
-              <RAGSearchPanel projectId={activeProject.id} />
-            </TabsContent>
-
-            <TabsContent value="analytics" className="h-full mt-0">
-              <AnalyticsPanel projectId={activeProject.id} />
-            </TabsContent>
-
-            <TabsContent value="preferences" className="h-full mt-0">
-              <PreferencesPage />
-            </TabsContent>
-          </div>
-        </Tabs>
+        </main>
       </div>
     </div>
   );

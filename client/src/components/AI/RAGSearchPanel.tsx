@@ -174,22 +174,20 @@ export const RAGSearchPanel: React.FC<RAGSearchPanelProps> = ({ projectId }) => 
   };
 
   return (
-    <div className="h-full flex flex-col space-y-4">
-      {/* Search Header */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Brain className="h-5 w-5 text-blue-600" />
-              <span>RAG Search</span>
-            </div>
-            <Badge variant="outline" className="text-xs">
-              Semantic Search
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-0">
-          <form onSubmit={handleSearch} className="space-y-4">
+    <div className="h-full flex flex-col space-y-3">
+      {/* Compact Search Header */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-blue-50 to-green-50 rounded-lg border">
+          <div className="flex items-center space-x-2">
+            <Search className="h-4 w-4 text-blue-600" />
+            <span className="font-medium text-sm">Smart Search</span>
+          </div>
+          <Badge variant="outline" className="text-xs py-0 px-2">
+            RAG
+          </Badge>
+        </div>
+        
+        <form onSubmit={handleSearch} className="space-y-3 px-3">
             {/* Search Input */}
             <div className="flex space-x-2">
               <Input
@@ -232,8 +230,7 @@ export const RAGSearchPanel: React.FC<RAGSearchPanelProps> = ({ projectId }) => 
               </div>
             </div>
           </form>
-        </CardContent>
-      </Card>
+        </div>
 
       {/* Quick Searches */}
       <Card>

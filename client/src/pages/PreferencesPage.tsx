@@ -95,35 +95,36 @@ export const PreferencesPage: React.FC = () => {
   ];
 
   return (
-    <div className="h-full overflow-y-auto p-6 space-y-6">
-      {/* Header */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center space-x-2">
-            <Settings className="h-6 w-6 text-blue-600" />
-            <span>Preferences & Settings</span>
-            {activeProject && (
-              <span className="text-sm font-normal text-gray-500">
-                • Project: {activeProject.title}
-              </span>
-            )}
-          </CardTitle>
-        </CardHeader>
-      </Card>
+    <div className="h-full overflow-y-auto p-4 space-y-4">
+      {/* Compact Header */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border">
+        <div className="flex items-center space-x-2">
+          <Settings className="h-4 w-4 text-blue-600" />
+          <span className="font-medium text-sm">Preferences</span>
+          {activeProject && (
+            <span className="text-xs text-gray-500">
+              • {activeProject.title.length > 15 ? activeProject.title.slice(0, 15) + '...' : activeProject.title}
+            </span>
+          )}
+        </div>
+      </div>
 
       <Tabs defaultValue="general" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="general" className="flex items-center space-x-1">
-            <User className="h-4 w-4" />
-            <span>General</span>
+        <TabsList className="grid w-full grid-cols-3 h-9">
+          <TabsTrigger value="general" className="flex items-center space-x-1.5 text-xs">
+            <User className="h-3 w-3" />
+            <span className="hidden sm:inline">General</span>
+            <span className="sm:hidden">Gen</span>
           </TabsTrigger>
-          <TabsTrigger value="writing" className="flex items-center space-x-1">
-            <FileText className="h-4 w-4" />
-            <span>Writing Flow</span>
+          <TabsTrigger value="writing" className="flex items-center space-x-1.5 text-xs">
+            <FileText className="h-3 w-3" />
+            <span className="hidden sm:inline">Writing</span>
+            <span className="sm:hidden">Write</span>
           </TabsTrigger>
-          <TabsTrigger value="ai" className="flex items-center space-x-1">
-            <MessageCircle className="h-4 w-4" />
-            <span>AI Settings</span>
+          <TabsTrigger value="ai" className="flex items-center space-x-1.5 text-xs">
+            <MessageCircle className="h-3 w-3" />
+            <span className="hidden sm:inline">AI</span>
+            <span className="sm:hidden">AI</span>
           </TabsTrigger>
         </TabsList>
 

@@ -172,21 +172,17 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
   };
 
   return (
-    <div className="h-full flex flex-col space-y-4">
-      {/* Chat Header */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center justify-between">
-            <div className="flex items-center space-x-2">
-              <Brain className="h-5 w-5 text-purple-600" />
-              <span>AI Writing Assistant</span>
-            </div>
-            <Badge variant="outline" className="text-xs">
-              Project-Aware
-            </Badge>
-          </CardTitle>
-        </CardHeader>
-      </Card>
+    <div className="h-full flex flex-col space-y-3">
+      {/* Compact Chat Header */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-purple-50 to-blue-50 rounded-lg border">
+        <div className="flex items-center space-x-2">
+          <Brain className="h-4 w-4 text-purple-600" />
+          <span className="font-medium text-sm">AI Chat</span>
+        </div>
+        <Badge variant="outline" className="text-xs py-0 px-2">
+          Context-Aware
+        </Badge>
+      </div>
 
       {/* Chat Messages */}
       <Card className="flex-1 flex flex-col">

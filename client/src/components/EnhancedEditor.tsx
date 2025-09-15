@@ -141,30 +141,11 @@ export const EnhancedEditor: React.FC<EnhancedEditorProps> = ({
     }
   };
 
-  // Spell check function (basic implementation)
-  const getSpellingSuggestions = (word: string): string[] => {
-    // This is a basic implementation. In a real app, you'd use a proper spell-check library
-    const commonMisspellings: Record<string, string> = {
-      'teh': 'the',
-      'adn': 'and',
-      'recieve': 'receive',
-      'seperate': 'separate',
-      'definately': 'definitely',
-      'occured': 'occurred',
-      'begining': 'beginning',
-      'writting': 'writing',
-      'thier': 'their',
-      'freind': 'friend'
-    };
-    
-    return commonMisspellings[word.toLowerCase()] ? [commonMisspellings[word.toLowerCase()]] : [];
-  };
 
   // Render suggestion overlay
   const renderSuggestionOverlay = () => {
     if (!suggestion || !showSuggestion || !textareaRef.current) return null;
     
-    const textarea = textareaRef.current;
     const beforeText = content.substring(0, suggestion.position);
     const lines = beforeText.split('\n');
     const currentLine = lines.length - 1;

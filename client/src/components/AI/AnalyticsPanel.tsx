@@ -134,13 +134,15 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
   }
 
   return (
-    <div className="h-full overflow-y-auto space-y-6 p-1">
-      {/* Header with refresh button */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">Project Analytics</h2>
-        <Button onClick={loadAnalytics} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh
+    <div className="h-full overflow-y-auto space-y-4 p-1">
+      {/* Compact Header */}
+      <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border">
+        <div className="flex items-center space-x-2">
+          <BarChart3 className="h-4 w-4 text-blue-600" />
+          <h2 className="text-sm font-semibold text-gray-900">Analytics</h2>
+        </div>
+        <Button onClick={loadAnalytics} variant="outline" size="sm" className="h-7 px-2">
+          <RefreshCw className="w-3 h-3" />
         </Button>
       </div>
 

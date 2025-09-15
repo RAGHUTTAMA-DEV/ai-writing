@@ -7,17 +7,7 @@ import { Input } from '../ui/input';
 import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
-import { 
-  Lightbulb, 
-  Target, 
-  Eye, 
-  Users, 
-  RefreshCw, 
-  Sparkles,
-  CheckCircle,
-  AlertCircle,
-  Info
-} from 'lucide-react';
+import { Icon, LoadingIcon } from '../ui/icon';
 
 interface AIToolsPanelProps {
   projectId: string;
@@ -250,68 +240,72 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 animate-fade-in">
       {aiError && (
-        <div className="bg-red-50 border border-red-200 rounded-lg p-4 flex items-start space-x-3">
-          <AlertCircle className="h-5 w-5 text-red-500 mt-0.5" />
-          <div>
-            <h4 className="font-medium text-red-800">Error</h4>
-            <p className="text-sm text-red-700 mt-1">{aiError}</p>
-            <Button variant="outline" size="sm" className="mt-2" onClick={clearError}>
+        <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start space-x-2 animate-slide-up">
+          <Icon name="alert-circle" variant="danger" size="sm" className="mt-0.5" />
+          <div className="flex-1">
+            <p className="text-sm text-destructive/80 leading-relaxed">{aiError}</p>
+            <Button variant="outline" size="sm" className="mt-2 h-7 px-2 text-xs hover:bg-destructive hover:text-destructive-foreground" onClick={clearError}>
               Dismiss
             </Button>
           </div>
         </div>
       )}
 
-      <Tabs defaultValue="suggestions" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-4">
-          <TabsTrigger value="suggestions" className="flex items-center space-x-2">
-            <Lightbulb className="h-4 w-4" />
-            <span>Suggestions</span>
+      <Tabs defaultValue="suggestions" className="space-y-4">
+        <TabsList className="grid w-full grid-cols-4 bg-muted/30 p-1 rounded-lg h-9">
+          <TabsTrigger value="suggestions" className="flex items-center space-x-1.5 font-medium transition-all duration-200 text-xs">
+            <Icon name="lightbulb" size="xs" />
+            <span className="hidden sm:inline">Suggestions</span>
+            <span className="sm:hidden">Sug</span>
           </TabsTrigger>
-          <TabsTrigger value="theme" className="flex items-center space-x-2">
-            <Target className="h-4 w-4" />
+          <TabsTrigger value="theme" className="flex items-center space-x-1.5 font-medium transition-all duration-200 text-xs">
+            <Icon name="target" size="xs" />
             <span>Theme</span>
           </TabsTrigger>
-          <TabsTrigger value="foreshadowing" className="flex items-center space-x-2">
-            <Eye className="h-4 w-4" />
-            <span>Foreshadowing</span>
+          <TabsTrigger value="foreshadowing" className="flex items-center space-x-1.5 font-medium transition-all duration-200 text-xs">
+            <Icon name="eye" size="xs" />
+            <span className="hidden sm:inline">Foreshadowing</span>
+            <span className="sm:hidden">Fore</span>
           </TabsTrigger>
-          <TabsTrigger value="character" className="flex items-center space-x-2">
-            <Users className="h-4 w-4" />
-            <span>Character</span>
+          <TabsTrigger value="character" className="flex items-center space-x-1.5 font-medium transition-all duration-200 text-xs">
+            <Icon name="users" size="xs" />
+            <span className="hidden sm:inline">Character</span>
+            <span className="sm:hidden">Char</span>
           </TabsTrigger>
         </TabsList>
 
-        <TabsContent value="suggestions">
-          <Card>
-            <CardHeader>
+        <TabsContent value="suggestions" className="animate-fade-in">
+          <Card className="shadow-sm">
+            <CardHeader className="pb-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="flex items-center space-x-2">
-                  <Sparkles className="h-5 w-5 text-blue-600" />
-                  <span>AI Writing Suggestions</span>
-                </CardTitle>
-                <div className="flex items-center space-x-2">
+                <CardTitle className="flex items-center space-x-2 text-base">
+                  <Icon name="sparkles" variant="primary" size="sm" />
+                  <span>AI Suggestions</span>
                   {suggestions.length > 0 && (
-                    <Badge variant="secondary">{suggestions.length} suggestions</Badge>
+                    <Badge variant="secondary" className="bg-primary-solid/10 text-primary-solid border-primary-solid/20 text-xs">
+                      {suggestions.length}
+                    </Badge>
                   )}
-                  <Button
-                    onClick={handleGenerateSuggestions}
-                    disabled={aiLoading}
-                    className="flex items-center space-x-2"
-                  >
-                    {aiLoading ? (
-                      <RefreshCw className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Sparkles className="h-4 w-4" />
-                    )}
-                    <span>{aiLoading ? 'Generating...' : 'Generate'}</span>
-                  </Button>
-                </div>
+                </CardTitle>
+                <Button
+                  onClick={handleGenerateSuggestions}
+                  disabled={aiLoading}
+                  variant="gradient"
+                  size="sm"
+                  className="flex items-center space-x-1.5 h-8 px-3"
+                >
+                  {aiLoading ? (
+                    <LoadingIcon size="xs" className="text-white" />
+                  ) : (
+                    <Icon name="sparkles" size="xs" className="text-white" />
+                  )}
+                  <span className="text-xs">{aiLoading ? 'Generating...' : 'Generate'}</span>
+                </Button>
               </div>
             </CardHeader>
-            <CardContent>
+            <CardContent className="pt-0">
               {suggestions.length > 0 ? (
                 <div className="space-y-4">
                   {renderAnalysisResult(suggestions, 'suggestions')}
@@ -326,9 +320,11 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                 </div>
               ) : (
                 <div className="text-center py-12">
-                  <Lightbulb className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <h3 className="text-lg font-medium text-gray-900 mb-2">No suggestions yet</h3>
-                  <p className="text-gray-500 mb-4">
+                  <div className="p-4 bg-muted/20 rounded-full w-fit mx-auto mb-4">
+                    <Icon name="lightbulb" size="xl" variant="muted" />
+                  </div>
+                  <h3 className="text-lg font-semibold text-foreground mb-2">No suggestions yet</h3>
+                  <p className="text-muted-foreground mb-4 leading-relaxed max-w-sm mx-auto">
                     Get AI-powered writing suggestions tailored to your project
                   </p>
                 </div>
@@ -337,11 +333,11 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="theme">
-          <Card>
+        <TabsContent value="theme" className="animate-fade-in">
+          <Card className="gradient-card shadow-medium">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
-                <Target className="h-5 w-5 text-green-600" />
+                <Icon name="target" variant="success" />
                 <span>Theme Consistency Analysis</span>
               </CardTitle>
             </CardHeader>
@@ -359,17 +355,19 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                   <Button 
                     onClick={handleThemeAnalysis}
                     disabled={aiLoading || !themeInput.trim()}
+                    variant="success"
                   >
-                    {aiLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Analyze'}
+                    {aiLoading ? <LoadingIcon /> : <Icon name="target" />}
+                    <span>{aiLoading ? 'Analyzing...' : 'Analyze'}</span>
                   </Button>
                 </div>
               </div>
 
               {themeAnalysis.length > 0 && (
-                <div className="mt-6">
+                <div className="mt-6 animate-slide-up">
                   <div className="flex items-center space-x-2 mb-4">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    <h3 className="font-medium">Analysis Results</h3>
+                    <Icon name="check-circle" variant="success" />
+                    <h3 className="font-semibold text-foreground">Analysis Results</h3>
                   </div>
                   {renderAnalysisResult(themeAnalysis, 'theme')}
                 </div>
@@ -378,23 +376,23 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
           </Card>
         </TabsContent>
 
-        <TabsContent value="foreshadowing">
-          <Card>
+        <TabsContent value="foreshadowing" className="animate-fade-in">
+          <Card className="gradient-card shadow-medium">
             <CardHeader>
               <div className="flex items-center justify-between">
                 <CardTitle className="flex items-center space-x-2">
-                  <Eye className="h-5 w-5 text-purple-600" />
+                  <Icon name="eye" className="text-purple-600" />
                   <span>Foreshadowing Analysis</span>
                 </CardTitle>
                 <Button 
                   onClick={handleForeshadowingCheck}
                   disabled={aiLoading}
-                  className="flex items-center space-x-2"
+                  className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white"
                 >
                   {aiLoading ? (
-                    <RefreshCw className="h-4 w-4 animate-spin" />
+                    <LoadingIcon className="text-white" />
                   ) : (
-                    <Eye className="h-4 w-4" />
+                    <Icon name="eye" className="text-white" />
                   )}
                   <span>Analyze</span>
                 </Button>
@@ -402,28 +400,30 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
             </CardHeader>
             <CardContent>
               {foreshadowing.length > 0 ? (
-                <div className="space-y-4">
+                <div className="space-y-4 animate-slide-up">
                   <div className="flex items-center space-x-2 mb-4">
-                    <Info className="h-5 w-5 text-blue-600" />
-                    <h3 className="font-medium">Foreshadowing Opportunities</h3>
+                    <Icon name="info" variant="primary" />
+                    <h3 className="font-semibold text-foreground">Foreshadowing Opportunities</h3>
                   </div>
                   {renderAnalysisResult(foreshadowing, 'foreshadowing')}
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <Eye className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-                  <p className="text-gray-500">Click "Analyze" to check for foreshadowing opportunities</p>
+                  <div className="p-4 bg-purple-50 rounded-full w-fit mx-auto mb-4">
+                    <Icon name="eye" size="xl" className="text-purple-400" />
+                  </div>
+                  <p className="text-muted-foreground">Click "Analyze" to check for foreshadowing opportunities</p>
                 </div>
               )}
             </CardContent>
           </Card>
         </TabsContent>
 
-        <TabsContent value="character">
-          <Card>
+        <TabsContent value="character" className="animate-fade-in">
+          <Card className="gradient-card shadow-medium">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2">
-                <Users className="h-5 w-5 text-orange-600" />
+                <Icon name="users" variant="warning" />
                 <span>Character Development Analysis</span>
               </CardTitle>
             </CardHeader>
@@ -441,17 +441,19 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                   <Button 
                     onClick={handleMotivationStakes}
                     disabled={aiLoading || !characterInput.trim()}
+                    variant="warning"
                   >
-                    {aiLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : 'Analyze'}
+                    {aiLoading ? <LoadingIcon /> : <Icon name="users" />}
+                    <span>{aiLoading ? 'Analyzing...' : 'Analyze'}</span>
                   </Button>
                 </div>
               </div>
 
               {motivationStakes.length > 0 && (
-                <div className="mt-6">
+                <div className="mt-6 animate-slide-up">
                   <div className="flex items-center space-x-2 mb-4">
-                    <CheckCircle className="h-5 w-5 text-green-600" />
-                    <h3 className="font-medium">Character Analysis</h3>
+                    <Icon name="check-circle" variant="success" />
+                    <h3 className="font-semibold text-foreground">Character Analysis</h3>
                   </div>
                   {renderAnalysisResult(motivationStakes, 'character')}
                 </div>
