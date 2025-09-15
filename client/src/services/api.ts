@@ -83,6 +83,7 @@ interface UserPreferences {
 interface ThemeConsistencyRequest {
   text: string;
   theme: string;
+  projectId?: string;
 }
 
 interface ThemeConsistencyResponse {
@@ -93,6 +94,7 @@ interface ThemeConsistencyResponse {
 interface ForeshadowingRequest {
   text: string;
   context?: string;
+  projectId?: string;
 }
 
 interface ForeshadowingResponse {
@@ -103,6 +105,7 @@ interface ForeshadowingResponse {
 interface MotivationStakesRequest {
   text: string;
   character: string;
+  projectId?: string;
 }
 
 interface MotivationStakesResponse {
@@ -126,10 +129,26 @@ interface RAGSearchRequest {
 
 interface RAGSearchResponse {
   message: string;
+  query: string;
   results: Array<{
     content: string;
     metadata: any;
   }>;
+  insights?: {
+    relevantCharacters: string[];
+    relevantThemes: string[];
+    suggestedConnections: string[];
+    contextualHints: string[];
+  };
+  summary?: {
+    totalResults: number;
+    topCharacters: string[];
+    topThemes: string[];
+    contentTypes: string[];
+    keyFindings: string[];
+    searchStrategy: string;
+  };
+  totalResults: number;
 }
 
 class APIService {
@@ -247,24 +266,24 @@ class APIService {
     });
   }
 
-  async analyzeThemeConsistency(text: string, theme: string): Promise<ThemeConsistencyResponse> {
+  async analyzeThemeConsistency(text: string, theme: string, projectId?: string): Promise<ThemeConsistencyResponse> {
     return this.request<ThemeConsistencyResponse>('/ai/theme-consistency', {
       method: 'POST',
-      body: JSON.stringify({ text, theme }),
+      body: JSON.stringify({ text, theme, projectId }),
     });
   }
 
-  async checkForeshadowing(text: string, context?: string): Promise<ForeshadowingResponse> {
+  async checkForeshadowing(text: string, context?: string, projectId?: string): Promise<ForeshadowingResponse> {
     return this.request<ForeshadowingResponse>('/ai/foreshadowing', {
       method: 'POST',
-      body: JSON.stringify({ text, context }),
+      body: JSON.stringify({ text, context, projectId }),
     });
   }
 
-  async evaluateMotivationAndStakes(text: string, character: string): Promise<MotivationStakesResponse> {
+  async evaluateMotivationAndStakes(text: string, character: string, projectId?: string): Promise<MotivationStakesResponse> {
     return this.request<MotivationStakesResponse>('/ai/motivation-stakes', {
       method: 'POST',
-      body: JSON.stringify({ text, character }),
+      body: JSON.stringify({ text, character, projectId }),
     });
   }
 
@@ -275,41 +294,109 @@ class APIService {
     });
   }
 
-  async searchRAG(query: string, limit?: number): Promise<RAGSearchResponse> {
+  async searchRAG(query: string, projectId?: string, limit?: number): Promise<RAGSearchResponse> {
     return this.request<RAGSearchResponse>('/ai/rag/search', {
       method: 'POST',
-      body: JSON.stringify({ query, limit }),
+      body: JSON.stringify({ query, projectId, limit }),
     });
   }
 
-  // Chatbot endpoints
+  // Enhanced Chatbot endpoints
   async getPersonalizedSuggestions(context: string, projectId?: string): Promise<ChatbotSuggestionResponse> {
-    return this.request<ChatbotSuggestionResponse>('/chatbot/suggestions', {
+    return this.request<ChatbotSuggestionResponse>('/enhanced-chatbot/suggestions', {
       method: 'POST',
       body: JSON.stringify({ context, projectId }),
     });
   }
 
-  async getWritingFlowQuestions(): Promise<{ questions: string[] }> {
-    return this.request<{ questions: string[] }>('/chatbot/writing-flow/questions');
+  async getWritingFlowQuestions(): Promise<{ questions: string[]; templateId: string }> {
+    return this.request<{ questions: string[]; templateId: string }>('/enhanced-chatbot/writing-flow/questions');
   }
 
-  async submitWritingFlowAnswers(answers: Record<string, string>): Promise<{ message: string }> {
-    return this.request<{ message: string }>('/chatbot/writing-flow/answers', {
+  async submitWritingFlowAnswers(answers: Record<string, string>, templateId?: string, projectId?: string): Promise<{ message: string; responseId: string }> {
+    return this.request<{ message: string; responseId: string }>('/enhanced-chatbot/writing-flow/answers', {
       method: 'POST',
-      body: JSON.stringify({ answers }),
+      body: JSON.stringify({ answers, templateId, projectId }),
     });
   }
 
   async getUserPreferences(): Promise<{ preferences: UserPreferences }> {
-    return this.request<{ preferences: UserPreferences }>('/chatbot/preferences');
+    return this.request<{ preferences: UserPreferences }>('/enhanced-chatbot/preferences');
   }
 
-  async updateUserPreferences(preferences: UserPreferences): Promise<{ message: string }> {
-    return this.request<{ message: string }>('/chatbot/preferences', {
+  async updateUserPreferences(preferences: UserPreferences): Promise<{ message: string; preferences: UserPreferences }> {
+    return this.request<{ message: string; preferences: UserPreferences }>('/enhanced-chatbot/preferences', {
       method: 'PUT',
       body: JSON.stringify({ preferences }),
     });
+  }
+
+  // Enhanced RAG and AI endpoints
+  async getProjectInsights(projectId: string, query?: string): Promise<any> {
+    const queryParam = query ? `?query=${encodeURIComponent(query)}` : '';
+    return this.request<any>(`/enhanced-chatbot/project-insights/${projectId}${queryParam}`);
+  }
+
+  async advancedContextSearch(options: {
+    query: string;
+    projectId?: string;
+    contentTypes?: string[];
+    themes?: string[];
+    characters?: string[];
+    importance?: number;
+    limit?: number;
+  }): Promise<any> {
+    return this.request<any>('/enhanced-chatbot/advanced-search', {
+      method: 'POST',
+      body: JSON.stringify(options),
+    });
+  }
+
+  async getConversationHistory(projectId?: string, limit?: number): Promise<any> {
+    const params = new URLSearchParams();
+    if (projectId) params.append('projectId', projectId);
+    if (limit) params.append('limit', limit.toString());
+    
+    const queryString = params.toString() ? `?${params.toString()}` : '';
+    return this.request<any>(`/enhanced-chatbot/conversation-history${queryString}`);
+  }
+
+  // Project Analytics
+  async getProjectAnalytics(projectId: string): Promise<{
+    message: string;
+    projectId: string;
+    basic: {
+      title: string;
+      description?: string;
+      format: string;
+      type: string;
+      createdAt: string;
+      updatedAt: string;
+      contentLength: number;
+      wordCount: number;
+    };
+    analytics: {
+      characters: string[];
+      themes: string[];
+      contentTypes: string[];
+      emotions: string[];
+      plotElements: string[];
+      semanticTags: string[];
+      totalDocuments: number;
+      totalChunks: number;
+      totalWordCount: number;
+      averageImportance: number;
+      lastUpdated?: string;
+    };
+    context: {
+      writingStyle: string;
+      toneAnalysis: string;
+      settings: string[];
+      lastContextUpdate: string;
+    } | null;
+    hasRAGData: boolean;
+  }> {
+    return this.request<any>(`/ai/analytics/${projectId}`);
   }
 }
 

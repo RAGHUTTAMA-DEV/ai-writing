@@ -31,4 +31,10 @@ router.post('/rag/add-project', (req, res, next) => {
 });
 router.post('/rag/search', AIController.searchRAG);
 
+// Analytics endpoints
+router.get('/analytics/:projectId', (req, res, next) => {
+  console.log(`Received request for /analytics/${req.params.projectId}`);
+  AIController.getProjectAnalytics(req, res).catch(next);
+});
+
 export default router;

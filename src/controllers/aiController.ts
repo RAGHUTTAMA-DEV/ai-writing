@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import aiService from '../services/aiService';
-import improvedRAGService from '../services/improvedRAGService';
+import { ImprovedRAGService, EnhancedDocument } from '../services/improvedRAGService';
 import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
+const improvedRAGService = new ImprovedRAGService();
 
 interface AISuggestionRequest {
   projectId: string;
@@ -79,9 +80,9 @@ class AIController {
   }
 
   // Analyze theme consistency
-  async analyzeThemeConsistency(req: Request<{}, {}, { text: string; theme: string }>, res: Response): Promise<void> {
+  async analyzeThemeConsistency(req: Request<{}, {}, { text: string; theme: string; projectId?: string }>, res: Response): Promise<void> {
     try {
-      const { text, theme } = req.body;
+      const { text, theme, projectId } = req.body;
 
       if (!text || !theme) {
         res.status(400).json({ 
@@ -90,7 +91,7 @@ class AIController {
         return;
       }
 
-      const analysis = await aiService.analyzeThemeConsistency(text, theme);
+      const analysis = await aiService.analyzeThemeConsistency(text, theme, projectId);
 
       res.json({
         message: 'Theme consistency analysis completed',
@@ -105,9 +106,9 @@ class AIController {
   }
 
   // Check for foreshadowing opportunities
-  async checkForeshadowing(req: Request<{}, {}, { text: string; context: string }>, res: Response): Promise<void> {
+  async checkForeshadowing(req: Request<{}, {}, { text: string; context?: string; projectId?: string }>, res: Response): Promise<void> {
     try {
-      const { text, context } = req.body;
+      const { text, context, projectId } = req.body;
 
       if (!text) {
         res.status(400).json({ 
@@ -116,7 +117,7 @@ class AIController {
         return;
       }
 
-      const foreshadowing = await aiService.checkForeshadowing(text, context || '');
+      const foreshadowing = await aiService.checkForeshadowing(text, context || '', projectId);
 
       res.json({
         message: 'Foreshadowing analysis completed',
@@ -131,9 +132,9 @@ class AIController {
   }
 
   // Evaluate character motivation and stakes
-  async evaluateMotivationAndStakes(req: Request<{}, {}, { text: string; character: string }>, res: Response): Promise<void> {
+  async evaluateMotivationAndStakes(req: Request<{}, {}, { text: string; character: string; projectId?: string }>, res: Response): Promise<void> {
     try {
-      const { text, character } = req.body;
+      const { text, character, projectId } = req.body;
 
       if (!text || !character) {
         res.status(400).json({ 
@@ -142,7 +143,7 @@ class AIController {
         return;
       }
 
-      const evaluation = await aiService.evaluateMotivationAndStakes(text, character);
+      const evaluation = await aiService.evaluateMotivationAndStakes(text, character, projectId);
 
       res.json({
         message: 'Motivation and stakes evaluation completed',
@@ -172,7 +173,7 @@ class AIController {
       await improvedRAGService.addDocument(content, {
         ...metadata,
         userId,
-        timestamp: new Date().toISOString()
+        timestamp: new Date()
       });
 
       res.json({
@@ -186,7 +187,7 @@ class AIController {
     }
   }
 
-  // Add project content to RAG system
+  // Add project content to RAG system with enhanced metadata extraction
   async addProjectToRAG(req: Request<{}, {}, { projectId: string; content: string }>, res: Response): Promise<void> {
     try {
       const { projectId, content } = req.body;
@@ -198,6 +199,8 @@ class AIController {
         });
         return;
       }
+
+      console.log(`📝 Adding project ${projectId} to RAG with enhanced metadata extraction...`);
 
       // Verify project ownership
       const project = await prisma.project.findFirst({
@@ -212,23 +215,55 @@ class AIController {
         return;
       }
 
+      // Use the RAG service's enhanced metadata extraction
       await improvedRAGService.addDocument(content, {
         projectId,
         userId,
         projectTitle: project.title,
-        timestamp: new Date().toISOString(),
-        contentType: 'project'
+        timestamp: new Date(),
+        contentType: 'project',
+        importance: 9 // High importance for project content
       });
 
+      // Sync project context to ensure all metadata is extracted and cached
+      console.log(`🔄 Syncing project context for enhanced analytics...`);
+      const projectContext = await improvedRAGService.syncProjectContext(projectId);
+      
+      // Get detailed project analytics
+      const projectStats = await improvedRAGService.getProjectStats(projectId);
+      
+      console.log(`✅ Project successfully added to RAG with enhanced metadata:`);
+      console.log(`  - Characters: ${projectStats.characters.length}`);
+      console.log(`  - Themes: ${projectStats.themes.length}`);
+      console.log(`  - Content Types: ${projectStats.contentTypes.length}`);
+      console.log(`  - Total Word Count: ${projectStats.totalWordCount}`);
+
       res.json({
-        message: 'Project content added to RAG system successfully'
+        message: 'Project content added to RAG system successfully with enhanced metadata',
+        analytics: {
+          characters: projectStats.characters,
+          themes: projectStats.themes,
+          contentTypes: projectStats.contentTypes,
+          emotions: projectStats.emotions,
+          plotElements: projectStats.plotElements,
+          semanticTags: projectStats.semanticTags,
+          totalDocuments: projectStats.totalDocuments,
+          totalChunks: projectStats.totalChunks,
+          totalWordCount: projectStats.totalWordCount,
+          averageImportance: projectStats.averageImportance,
+          lastUpdated: projectStats.lastUpdated
+        },
+        projectContext: projectContext ? {
+          writingStyle: projectContext.writingStyle,
+          toneAnalysis: projectContext.toneAnalysis,
+          settings: projectContext.settings
+        } : null
       });
     } catch (error) {
-      console.error('Error adding project to RAG system:', error);
+      console.error('❌ Error adding project to RAG system:', error);
       res.status(500).json({ 
         message: 'Server error while adding project to RAG system',
-        //@ts-ignore
-        error: error.message
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   }
@@ -258,19 +293,103 @@ class AIController {
       res.json({
         message: 'Search completed successfully',
         query,
-        results: searchResults.results.map(doc => ({
+        results: searchResults.results.map((doc: EnhancedDocument) => ({
           content: doc.pageContent,
           metadata: doc.metadata
         })),
         insights: searchResults.projectInsights,
+        summary: searchResults.searchSummary,
         totalResults: searchResults.results.length
       });
     } catch (error) {
       console.error('Error searching RAG system:', error);
       res.status(500).json({ 
         message: 'Server error while searching RAG system',
-        //@ts-ignore
-        error: error.message
+        error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  // Get project analytics for frontend
+  async getProjectAnalytics(req: Request<{ projectId: string }>, res: Response): Promise<void> {
+    try {
+      const { projectId } = req.params;
+      const userId = (req as any).user?.id;
+
+      if (!projectId) {
+        res.status(400).json({ 
+          message: 'Project ID is required' 
+        });
+        return;
+      }
+
+      console.log(`📊 Fetching analytics for project ${projectId}...`);
+
+      // Verify project ownership
+      const project = await prisma.project.findFirst({
+        where: {
+          id: projectId,
+          ownerId: userId
+        }
+      });
+
+      if (!project) {
+        res.status(403).json({ message: 'Project not found or access denied' });
+        return;
+      }
+
+      // Get project stats and context
+      const projectStats = await improvedRAGService.getProjectStats(projectId);
+      const projectContext = await improvedRAGService.syncProjectContext(projectId);
+      
+      // Get basic project info
+      const basicAnalytics = {
+        title: project.title,
+        description: project.description,
+        format: project.format,
+        type: project.type,
+        createdAt: project.createdAt,
+        updatedAt: project.updatedAt,
+        contentLength: project.content?.length || 0,
+        wordCount: project.content ? project.content.split(/\s+/).length : 0
+      };
+
+      console.log(`✅ Analytics retrieved for project "${project.title}":`);
+      console.log(`  - Characters found: ${projectStats.characters.length}`);
+      console.log(`  - Themes found: ${projectStats.themes.length}`);
+      console.log(`  - Emotions found: ${projectStats.emotions.length}`);
+      console.log(`  - Plot elements found: ${projectStats.plotElements.length}`);
+
+      res.json({
+        message: 'Project analytics retrieved successfully',
+        projectId,
+        basic: basicAnalytics,
+        analytics: {
+          characters: projectStats.characters,
+          themes: projectStats.themes,
+          contentTypes: projectStats.contentTypes,
+          emotions: projectStats.emotions,
+          plotElements: projectStats.plotElements,
+          semanticTags: projectStats.semanticTags,
+          totalDocuments: projectStats.totalDocuments,
+          totalChunks: projectStats.totalChunks,
+          totalWordCount: projectStats.totalWordCount,
+          averageImportance: projectStats.averageImportance,
+          lastUpdated: projectStats.lastUpdated
+        },
+        context: projectContext ? {
+          writingStyle: projectContext.writingStyle,
+          toneAnalysis: projectContext.toneAnalysis,
+          settings: projectContext.settings,
+          lastContextUpdate: projectContext.lastUpdated
+        } : null,
+        hasRAGData: projectStats.totalDocuments > 0
+      });
+    } catch (error) {
+      console.error('❌ Error fetching project analytics:', error);
+      res.status(500).json({ 
+        message: 'Server error while fetching project analytics',
+        error: error instanceof Error ? error.message : 'Unknown error'
       });
     }
   }

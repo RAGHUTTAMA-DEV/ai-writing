@@ -85,7 +85,7 @@ export class ImprovedRAGService {
 
   private async initializeServices(): Promise<void> {
     try {
-      const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_AI_API_KEY;
+      const apiKey = process.env.GOOGLE_AI_API_KEY;
       if (!apiKey) {
         console.warn('🚨 Google AI API key not found. RAG service will use fallback text search.');
         return;
@@ -265,7 +265,6 @@ export class ImprovedRAGService {
       
       // Content type filter
       if (contentTypes && contentTypes.length > 0 && 
-        // @ts-ignore
           !contentTypes.includes(doc.metadata.contentType)) {
         return false;
       }
@@ -279,44 +278,6 @@ export class ImprovedRAGService {
     });
     
     console.log(`📊 Found ${candidateDocuments.length} candidate documents after filtering`);
-    
-    // If no documents found for project, try to get from database
-    if (candidateDocuments.length === 0 && projectId) {
-      console.log(`📄️ No RAG documents found for project ${projectId}, searching database content...`);
-      
-      try {
-        const project = await prisma.project.findUnique({
-          where: { id: projectId }
-        });
-        
-        if (project && project.content) {
-          console.log(`✅ Found project "${project.title}" content in database`);
-          
-          // Create a mock document from database content for search
-          const mockDoc: EnhancedDocument = {
-            pageContent: project.content,
-            metadata: {
-              id: `db_${projectId}`,
-              projectId: projectId,
-              contentType: 'project',
-              importance: 8, // High importance for direct project content
-              wordCount: project.content.split(/\s+/).length,
-              timestamp: project.updatedAt || new Date(),
-              characters: [],
-              themes: [],
-              emotions: [],
-              plotElements: [],
-              semanticTags: ['database', 'project-content']
-            }
-          };
-          
-          candidateDocuments = [mockDoc];
-          console.log('📄 Created mock document from database content for search');
-        }
-      } catch (error) {
-        console.error('❌ Error fetching project from database:', error);
-      }
-    }
     
     // Perform text-based search scoring
     const queryLower = query.toLowerCase();
@@ -912,50 +873,7 @@ Style: `;
       const projectDocs = this.getProjectDocuments(projectId);
       
       if (projectDocs.length === 0) {
-        console.log(`📊 No RAG documents found for project ${projectId}, fetching from database...`);
-        
-        // Try to get project data from database
-        const project = await prisma.project.findUnique({
-          where: { id: projectId },
-          include: {
-            owner: {
-              select: {
-                id: true,
-                username: true
-              }
-            }
-          }
-        });
-        
-        if (!project || !project.content) {
-          console.log(`❌ No project found or no content for project ${projectId}`);
-          return null;
-        }
-        
-        console.log(`✅ Found project "${project.title}" with content, analyzing...`);
-        
-        // Analyze the project content directly from database
-        const analysis = await this.analyzeProjectContent(project.content);
-        
-        const projectContext: ProjectContext = {
-          projectId,
-          characters: analysis.characters,
-          themes: analysis.themes,
-          plotPoints: analysis.plotPoints,
-          settings: analysis.settings,
-          writingStyle: analysis.writingStyle,
-          toneAnalysis: analysis.toneAnalysis,
-          lastUpdated: new Date()
-        };
-        
-        this.projectContexts.set(projectId, projectContext);
-        console.log(`💾 Cached project context for ${projectId}:`, {
-          characters: projectContext.characters.length,
-          themes: projectContext.themes.length,
-          plotPoints: projectContext.plotPoints.length
-        });
-        
-        return projectContext;
+        return null;
       }
 
       // Aggregate analysis from all project documents
@@ -1388,37 +1306,26 @@ Style: `;
         where: { projectId }
       });
 
-      // For update, don't include projectId (it's a relation field)
-      const updateData = {
+      const contextData = {
+        projectId,
         characters: analysis.characters || [],
         themes: analysis.themes || [],
         settings: analysis.settings || [],
-        plotPoints: analysis.plotPoints || [],
-        writingStyle: analysis.writingStyle || null,
-        toneAnalysis: analysis.toneAnalysis || null,
-        lastAnalyzed: new Date()
-      };
-
-      // For create, include projectId
-      const createData = {
-        projectId,
-        ...updateData
+        lastUpdated: new Date()
       };
 
       if (existingContext) {
         await prisma.projectContext.update({
           where: { id: existingContext.id },
-          data: updateData
+          data: contextData
         });
-        console.log(`✅ Updated project context in database for project ${projectId}`);
       } else {
         await prisma.projectContext.create({
-          data: createData
+          data: contextData
         });
-        console.log(`✅ Created project context in database for project ${projectId}`);
       }
     } catch (error) {
-      console.error('❌ Error updating project context in DB:', error);
+      console.error('Error updating project context in DB:', error);
     }
   }
 
@@ -1430,7 +1337,6 @@ Style: `;
       if (filters.importance && doc.metadata.importance && doc.metadata.importance < filters.importance) return false;
 
       // Content type filtering
-      // @ts-ignore
       if (filters.contentTypes?.length && !filters.contentTypes.includes(doc.metadata.contentType)) return false;
 
       // Theme filtering with fuzzy matching

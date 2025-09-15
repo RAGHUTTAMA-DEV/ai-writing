@@ -8,13 +8,21 @@ interface AIState {
   foreshadowing: string[];
   motivationStakes: string[];
   ragResults: Array<{ content: string; metadata: any }>;
+  ragSummary: {
+    totalResults: number;
+    topCharacters: string[];
+    topThemes: string[];
+    contentTypes: string[];
+    keyFindings: string[];
+    searchStrategy: string;
+  } | null;
   loading: boolean;
   error: string | null;
   generateSuggestions: (projectId: string, context: string) => Promise<void>;
-  analyzeThemeConsistency: (text: string, theme: string) => Promise<void>;
-  checkForeshadowing: (text: string, context?: string) => Promise<void>;
-  evaluateMotivationAndStakes: (text: string, character: string) => Promise<void>;
-  searchRAG: (query: string, limit?: number) => Promise<void>;
+  analyzeThemeConsistency: (text: string, theme: string, projectId?: string) => Promise<void>;
+  checkForeshadowing: (text: string, context?: string, projectId?: string) => Promise<void>;
+  evaluateMotivationAndStakes: (text: string, character: string, projectId?: string) => Promise<void>;
+  searchRAG: (query: string, projectId?: string, limit?: number) => Promise<void>;
   clearSuggestions: () => void;
   clearError: () => void;
 }
@@ -27,6 +35,7 @@ export const useAIStore = create<AIState>()(
       foreshadowing: [],
       motivationStakes: [],
       ragResults: [],
+      ragSummary: null,
       loading: false,
       error: null,
 
@@ -47,10 +56,10 @@ export const useAIStore = create<AIState>()(
         }
       },
 
-      analyzeThemeConsistency: async (text: string, theme: string) => {
+      analyzeThemeConsistency: async (text: string, theme: string, projectId?: string) => {
         try {
           set({ loading: true, error: null });
-          const response = await apiService.analyzeThemeConsistency(text, theme);
+          const response = await apiService.analyzeThemeConsistency(text, theme, projectId);
           set(state => ({
             themeAnalysis: [...state.themeAnalysis, response.analysis],
             loading: false
@@ -64,10 +73,10 @@ export const useAIStore = create<AIState>()(
         }
       },
 
-      checkForeshadowing: async (text: string, context?: string) => {
+      checkForeshadowing: async (text: string, context?: string, projectId?: string) => {
         try {
           set({ loading: true, error: null });
-          const response = await apiService.checkForeshadowing(text, context);
+          const response = await apiService.checkForeshadowing(text, context, projectId);
           set(state => ({
             foreshadowing: [...state.foreshadowing, response.foreshadowing],
             loading: false
@@ -81,10 +90,10 @@ export const useAIStore = create<AIState>()(
         }
       },
 
-      evaluateMotivationAndStakes: async (text: string, character: string) => {
+      evaluateMotivationAndStakes: async (text: string, character: string, projectId?: string) => {
         try {
           set({ loading: true, error: null });
-          const response = await apiService.evaluateMotivationAndStakes(text, character);
+          const response = await apiService.evaluateMotivationAndStakes(text, character, projectId);
           set(state => ({
             motivationStakes: [...state.motivationStakes, response.evaluation],
             loading: false
@@ -98,19 +107,32 @@ export const useAIStore = create<AIState>()(
         }
       },
 
-      searchRAG: async (query: string, limit?: number) => {
+      searchRAG: async (query: string, projectId?: string, limit?: number) => {
         try {
+          console.log('📡 AI Store: Starting RAG search...', { query, projectId, limit });
           set({ loading: true, error: null });
-          const response = await apiService.searchRAG(query, limit);
+          
+          const response = await apiService.searchRAG(query, projectId, limit);
+          console.log('📨 AI Store: Received API response:', response);
+          
+          const results = response.results || [];
+          const summary = response.summary || null;
+          console.log('📄 AI Store: Setting ragResults:', results);
+          console.log('📊 AI Store: Setting ragSummary:', summary);
+          
           set({ 
-            ragResults: response.results || [],
+            ragResults: results,
+            ragSummary: summary,
             loading: false
           });
+          
+          console.log('✅ AI Store: RAG search completed successfully');
         } catch (error: any) {
-          console.error('RAG search error:', error);
+          console.error('❌ AI Store RAG search error:', error);
           set({ 
             error: error.message || 'Failed to search RAG',
-            loading: false
+            loading: false,
+            ragResults: []
           });
         }
       },
@@ -121,7 +143,8 @@ export const useAIStore = create<AIState>()(
           themeAnalysis: [],
           foreshadowing: [],
           motivationStakes: [],
-          ragResults: []
+          ragResults: [],
+          ragSummary: null
         });
       },
 

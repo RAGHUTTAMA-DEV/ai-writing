@@ -1,9 +1,10 @@
 import { Request, Response } from 'express';
 import { PrismaClient } from '@prisma/client';
 import aiService from '../services/aiService';
-import improvedRAGService from '../services/improvedRAGService';
+import { ImprovedRAGService } from '../services/improvedRAGService';
 
 const prisma = new PrismaClient();
+const improvedRAGService = new ImprovedRAGService();
 
 // Get personalized suggestions based on context and user preferences
 export const getPersonalizedSuggestions = async (req: Request, res: Response): Promise<void> => {

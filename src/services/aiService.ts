@@ -1,10 +1,11 @@
   import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
-  import improvedRAGService, { ProjectContext } from './improvedRAGService';
+  import { ImprovedRAGService, ProjectContext } from './improvedRAGService';
   import { PrismaClient } from '@prisma/client';
-  import dotenv from "dotenv";
+  import * as dotenv from "dotenv";
 
   dotenv.config();
   const prisma = new PrismaClient();
+  const improvedRAGService = new ImprovedRAGService();
 
   interface ConversationMemory {
     userId: string;
@@ -34,8 +35,10 @@
 
   class AIService {
     private model: ChatGoogleGenerativeAI;
-    private conversationMemory: Map<string, ConversationMemory> = new Map();
-    private writingPatterns: Map<string, any> = new Map();
+  private conversationMemory: Map<string, ConversationMemory> = new Map();
+  private writingPatterns: Map<string, any> = new Map();
+  private readonly MAX_CONVERSATION_MEMORY_SIZE = 100;
+  private readonly MAX_WRITING_PATTERNS_SIZE = 50;
 
     constructor() {
       const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
@@ -92,10 +95,11 @@
           
           ${projectContext ? `
           PROJECT CONTEXT:
-          - Title: ${projectContext.title}
-          - Genre: ${projectContext.genre || 'Unknown'}
+          - Project ID: ${projectContext.projectId}
           - Characters: ${projectContext.characters?.join(', ') || 'None'}
           - Themes: ${projectContext.themes?.join(', ') || 'None'}
+          - Writing Style: ${projectContext.writingStyle || 'Unknown'}
+          - Settings: ${projectContext.settings?.join(', ') || 'None'}
           ` : ''}
           
           WRITING STYLE ANALYSIS:
@@ -121,7 +125,7 @@
         
         // Clean up the suggestion
         suggestion = suggestion.replace(/^["']|["']$/g, ''); // Remove quotes
-        suggestion = suggestion.replace(/\n.*$/s, ''); // Take only first line
+        suggestion = suggestion.replace(/\n.*$/, ''); // Take only first line
         suggestion = suggestion.slice(0, 100); // Limit length
         
         return suggestion;
@@ -142,15 +146,28 @@
           return 'AI features are not available due to missing API key configuration.';
         }
 
-        // Get project context and relevant chunks
+        console.log(`🎯 Generating suggestions for project: ${projectId}`);
+
+        // Get project context - this will fetch from database if no RAG documents exist
         const projectContext = await improvedRAGService.syncProjectContext(projectId);
-        const ragResults = await improvedRAGService.intelligentSearch(context, {
-          projectId,
-          limit: 5,
-          includeContext: true
-        });
-        const relevantChunks = ragResults.results;
-        const projectStats = await improvedRAGService.getProjectStats(projectId);
+        console.log(`📋 Project context retrieved:`, projectContext ? 'Found' : 'Not found');
+        
+        // Try to get relevant chunks from RAG, but don't fail if none exist
+        let relevantChunks: any[] = [];
+        let projectStats: any = { totalChunks: 0, characters: [], themes: [], contentTypes: [] };
+        
+        try {
+          const ragResults = await improvedRAGService.intelligentSearch(context, {
+            projectId,
+            limit: 5,
+            includeContext: true
+          });
+          relevantChunks = ragResults.results || [];
+          projectStats = await improvedRAGService.getProjectStats(projectId);
+          console.log(`🔍 RAG search found ${relevantChunks.length} relevant chunks`);
+        } catch (ragError) {
+          console.log(`⚠️ RAG search failed, proceeding with project context only`);
+        }
         
         // Get conversation memory for personalization
         const memory = userId ? await this.getConversationMemory(userId, projectId) : null;
@@ -170,8 +187,11 @@
           requestType: 'suggestions'
         });
 
+        console.log(`🤖 Invoking AI model for suggestions...`);
         const response = await this.model.invoke(prompt);
         const suggestions = response.content as string;
+        
+        console.log(`✅ AI suggestions generated successfully`);
         
         // Store in conversation memory
         if (userId) {
@@ -181,7 +201,7 @@
         
         return suggestions;
       } catch (error) {
-        console.error('Error generating suggestions:', error);
+        console.error('❌ Error generating suggestions:', error);
         return 'I encountered an error while generating suggestions. Please try again later.';
       }
     }
@@ -222,128 +242,210 @@
       };
     }
 
-    // Enhanced theme consistency analysis with project context
-    async analyzeThemeConsistency(text: string, theme: string, projectId?: string): Promise<string> {
-      if (!this.model) {
-        return 'AI features are not available due to missing API key configuration.';
-      }
-      
-      try {
-        const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
-        const ragResults = projectId ? await improvedRAGService.intelligentSearch(`theme ${theme}`, {
-          projectId,
-          limit: 3,
-          themes: [theme],
-          includeContext: true
-        }) : null;
-        const relevantChunks = ragResults?.results || [];
-        const analysis = this.analyzeWriting(text);
-        
-        const prompt = `
-          As an expert writing analyst, analyze the following text for consistency with the theme "${theme}".
-          
-          ${projectContext ? `
-          PROJECT CONTEXT:
-          - Title: ${projectContext.title}
-          - Genre: ${projectContext.genre || 'Unknown'}
-          - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
-          - Existing Themes: ${projectContext.themes?.join(', ') || 'None identified'}
-          ` : ''}
-          
-          CURRENT TEXT ANALYSIS:
-          - Word Count: ${analysis.wordCount}
-          - Detected Tone: ${analysis.tone}
-          - Detected Themes: ${analysis.themes.join(', ')}
-          - Readability Score: ${analysis.readabilityScore.toFixed(1)}
-          
-          TEXT TO ANALYZE:
-          "${text}"
-          
-          ${relevantChunks.length > 0 ? `
-          RELATED CONTENT FROM PROJECT:
-          ${relevantChunks.map((chunk, i) => `${i + 1}. ${chunk.pageContent.slice(0, 200)}...`).join('\n')}
-          ` : ''}
-          
-          Please provide:
-          1. **Theme Consistency Score** (1-10): How well does this text align with the "${theme}" theme?
-          2. **Specific Examples**: Point out specific elements that support or contradict the theme
-          3. **Improvement Suggestions**: Concrete ways to strengthen theme integration
-          4. **Continuity Check**: How well does this align with the existing project themes?
-          5. **Character Alignment**: Do character actions/dialogue support the theme?
-          
-          Format your response with clear headings and actionable advice.
-        `;
-
-        const response = await this.model.invoke(prompt);
-        return response.content as string;
-      } catch (error) {
-        console.error('Error analyzing theme consistency:', error);
-        return 'Unable to analyze theme consistency at this time.';
-      }
+  // Deep theme consistency analysis with narrative expertise
+  async analyzeThemeConsistency(text: string, theme: string, projectId?: string): Promise<string> {
+    if (!this.model) {
+      return 'AI features are not available due to missing API key configuration.';
     }
-
-    // Enhanced foreshadowing analysis with project awareness
-    async checkForeshadowing(text: string, context: string, projectId?: string): Promise<string> {
-      if (!this.model) {
-        return 'AI features are not available due to missing API key configuration.';
-      }
+    
+    try {
+      const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
+      const ragResults = projectId ? await improvedRAGService.intelligentSearch(`${theme} thematic elements character development`, {
+        projectId,
+        limit: 5,
+        themes: [theme],
+        includeContext: true
+      }) : null;
+      const relevantChunks = ragResults?.results || [];
+      const analysis = this.analyzeWriting(text);
       
-      try {
-        const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
-        const ragResults = projectId ? await improvedRAGService.intelligentSearch('plot future events', {
-          projectId,
-          limit: 4,
-          contentTypes: ['plot', 'narrative'],
-          includeContext: true
-        }) : null;
-        const relevantChunks = ragResults?.results || [];
-        const analysis = this.analyzeWriting(text);
-        
-        const prompt = `
-          As a master storytelling analyst, examine this text for foreshadowing opportunities and effectiveness.
-          
-          ${projectContext ? `
-          PROJECT CONTEXT:
-          - Title: ${projectContext.title}
-          - Plot Points: ${projectContext.plotPoints?.join(', ') || 'None identified'}
-          - Characters: ${projectContext.characters?.join(', ') || 'None identified'}
-          - Themes: ${projectContext.themes?.join(', ') || 'None identified'}
-          ` : ''}
-          
-          WRITING ANALYSIS:
-          - Detected Plot Points: ${analysis.plotPoints.join(', ')}
-          - Tone: ${analysis.tone}
-          - Pacing: ${analysis.pacing}
-          
-          CURRENT TEXT:
-          "${text}"
-          
-          BROADER CONTEXT:
-          "${context}"
-          
-          ${relevantChunks.length > 0 ? `
-          RELATED PROJECT CONTENT:
-          ${relevantChunks.map((chunk, i) => `${i + 1}. ${chunk.pageContent.slice(0, 150)}...`).join('\n')}
-          ` : ''}
-          
-          Please analyze:
-          1. **Existing Foreshadowing**: What subtle hints or setup are already present?
-          2. **Missed Opportunities**: What elements could be enhanced for better foreshadowing?
-          3. **Future Plot Points**: What upcoming events could be subtly hinted at here?
-          4. **Symbolic Elements**: Objects, dialogue, or actions that could carry deeper meaning
-          5. **Character Behavior**: How character actions now could hint at future development
-          6. **Specific Implementation**: Concrete suggestions for adding foreshadowing
-          
-          Provide actionable, specific advice that maintains the current tone and style.
-        `;
+      const prompt = `You are a literary scholar and professional editor specializing in thematic analysis and narrative coherence. Conduct a comprehensive theme consistency analysis.
 
-        const response = await this.model.invoke(prompt);
-        return response.content as string;
-      } catch (error) {
-        console.error('Error checking foreshadowing:', error);
-        return 'Unable to check for foreshadowing opportunities at this time.';
-      }
+**TARGET THEME**: "${theme}"
+
+${projectContext ? `
+**PROJECT UNIVERSE**:
+- Project ID: "${projectContext.projectId}"
+- Character Roster: ${projectContext.characters?.join(', ') || 'Characters developing'}
+- Established Thematic Framework: ${projectContext.themes?.join(', ') || 'Themes emerging'}
+- Narrative Style: ${projectContext.writingStyle || 'Style evolving'}
+- Settings: ${projectContext.settings?.join(', ') || 'Settings developing'}
+` : ''}
+
+**CURRENT TEXT ANALYSIS**:
+- Length: ${analysis.wordCount} words
+- Emotional Register: ${analysis.tone}
+- Detected Themes: ${analysis.themes.join(', ') || 'None detected'}
+- Characters Present: ${analysis.characters.join(', ') || 'None identified'}
+- Readability Level: ${analysis.readabilityScore.toFixed(1)}/100
+
+${relevantChunks.length > 0 ? `
+**THEMATIC CONTEXT FROM PROJECT**:
+${relevantChunks.map((chunk, i) => `
+[Reference ${i + 1}] ${chunk.metadata.contentType?.toUpperCase() || 'CONTENT'}:
+"${chunk.pageContent.slice(0, 250)}${chunk.pageContent.length > 250 ? '...' : ''}"
+Themes: ${chunk.metadata.themes?.join(', ') || 'none'}
+Emotional Tone: ${chunk.metadata.emotions?.join(', ') || 'none'}
+`).join('')}
+` : ''}
+
+**TEXT FOR THEMATIC ANALYSIS**:
+"""${text}"""
+
+Provide a sophisticated thematic analysis:
+
+## 📊 THEME CONSISTENCY EVALUATION
+**Score: [1-10]** with detailed justification
+- How explicitly vs. subtly is the theme presented?
+- Does the theme emerge naturally from character actions and plot?
+- Is the thematic treatment sophisticated and nuanced?
+
+## 🎭 THEMATIC EXPRESSION ANALYSIS
+**Direct Manifestations**:
+- Explicit mentions or discussions of the theme
+- Character statements that directly address the theme
+
+**Subtle Integration**:
+- Actions that demonstrate the theme without stating it
+- Symbolic elements that reinforce the theme
+- Subtext and implications that support thematic depth
+
+**Character-Theme Alignment**:
+- How character motivations reflect the theme
+- Whether character arcs support thematic development
+- Consistency between character actions and thematic messages
+
+## 💎 ENHANCEMENT OPPORTUNITIES
+**Strengthen Existing Elements**:
+- Specific sentences or scenes that could be deepened
+- Ways to make thematic elements more sophisticated
+- Opportunities to show rather than tell
+
+**New Integration Possibilities**:
+- Character moments that could be enhanced for thematic resonance
+- Dialogue opportunities for thematic subtext
+- Environmental or symbolic details that could reinforce the theme
+
+## 🏗️ NARRATIVE COHERENCE
+**Project-Wide Consistency**:
+- How this section fits with established thematic patterns
+- Whether the theme treatment matches your story's overall sophistication level
+- Continuity with character development and world-building
+
+**Reader Experience**:
+- Is the theme accessible without being heavy-handed?
+- Will readers discover new thematic layers on re-reading?
+- Does the theme enhance rather than overshadow the story?
+
+## 🎯 SPECIFIC ACTIONABLE RECOMMENDATIONS
+Provide 3-4 concrete suggestions with examples:
+- Exact phrases or scenes to modify
+- New details to weave in naturally
+- Ways to deepen existing thematic moments
+- Maintain your established voice and style
+
+Focus on sophisticated thematic integration that respects reader intelligence while ensuring thematic coherence throughout your narrative.`;
+
+      const response = await this.model.invoke(prompt);
+      return response.content as string;
+    } catch (error) {
+      console.error('Error analyzing theme consistency:', error);
+      return 'I encountered an error while analyzing theme consistency. Please try again, or consider manually reviewing how your chosen theme is woven through character actions, dialogue, and plot developments in this section.';
     }
+  }
+
+  // Advanced foreshadowing analysis with deep storytelling insights
+  async checkForeshadowing(text: string, context: string, projectId?: string): Promise<string> {
+    if (!this.model) {
+      return 'AI features are not available due to missing API key configuration.';
+    }
+    
+    try {
+      const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
+      const ragResults = projectId ? await improvedRAGService.intelligentSearch('plot future events character development', {
+        projectId,
+        limit: 6,
+        contentTypes: ['plot', 'narrative', 'character'],
+        includeContext: true
+      }) : null;
+      const relevantChunks = ragResults?.results || [];
+      const analysis = this.analyzeWriting(text);
+      
+      const prompt = `You are a master storytelling analyst and fiction editor with expertise in narrative craft, foreshadowing, and literary device implementation. Analyze this writing sample for foreshadowing opportunities.
+
+${projectContext ? `
+PROJECT UNIVERSE:
+- Project ID: "${projectContext.projectId}"
+- Established Characters: ${projectContext.characters?.join(', ') || 'Characters being developed'}
+- Core Themes: ${projectContext.themes?.join(', ') || 'Themes emerging'}
+- Known Plot Points: ${projectContext.plotPoints?.join(', ') || 'Plot developing organically'}
+- Writing Style: ${projectContext.writingStyle || 'Style being established'}
+- Settings: ${projectContext.settings?.join(', ') || 'Settings developing'}
+` : ''}
+
+CURRENT WRITING ANALYSIS:
+- Detected Themes: ${analysis.themes.join(', ') || 'None detected'}
+- Emotional Tone: ${analysis.tone}
+- Narrative Pacing: ${analysis.pacing}
+- Characters Present: ${analysis.characters.join(', ') || 'None identified'}
+- Plot Elements: ${analysis.plotPoints.join(', ') || 'None detected'}
+
+${relevantChunks.length > 0 ? `
+RELATED STORY CONTENT:
+${relevantChunks.map((chunk, i) => `
+[Context ${i + 1}] ${chunk.metadata.contentType?.toUpperCase() || 'CONTENT'}:
+"${chunk.pageContent.slice(0, 300)}${chunk.pageContent.length > 300 ? '...' : ''}"
+Themes: ${chunk.metadata.themes?.join(', ') || 'none'}
+Characters: ${chunk.metadata.characters?.join(', ') || 'none'}
+`).join('')}
+` : ''}
+
+TEXT TO ANALYZE FOR FORESHADOWING:
+"""${text}"""
+
+BROADER NARRATIVE CONTEXT:
+"""${context}"""
+
+Provide a comprehensive foreshadowing analysis covering:
+
+## 🔍 EXISTING FORESHADOWING ANALYSIS
+- Identify current subtle hints, symbols, or setup elements
+- Rate effectiveness (1-10) and explain reasoning
+- Note which future events these might be pointing toward
+
+## 💎 ENHANCEMENT OPPORTUNITIES
+- Specific elements that could be strengthened for better foreshadowing
+- Concrete ways to make existing hints more subtle yet powerful
+- Balance between subtlety and clarity for your target audience
+
+## 🌟 NEW FORESHADOWING POSSIBILITIES
+- **Character Actions**: Small behaviors that could hint at future character arcs
+- **Dialogue Subtext**: What characters say vs. what they mean - opportunities for layered meaning
+- **Environmental Details**: Setting elements that could mirror or predict future events
+- **Symbolic Objects**: Items that could carry deeper narrative significance
+- **Emotional Undercurrents**: Subtle emotional setups for future payoffs
+
+## 🎯 SPECIFIC IMPLEMENTATION SUGGESTIONS
+Provide 3-5 concrete, actionable suggestions with examples:
+- Exact sentences or phrases that could be modified
+- New details that could be naturally woven in
+- Character moments that could be enhanced
+- Maintain your established tone and style
+
+## 🏗️ NARRATIVE ARCHITECTURE
+- How this section fits into the larger story structure
+- Opportunities to plant seeds for major plot reveals
+- Ways to create satisfying "aha" moments for readers on re-reading
+
+Focus on sophisticated, literary foreshadowing that enhances rather than telegraphs future events. Consider your genre conventions and reader expectations.`;
+
+      const response = await this.model.invoke(prompt);
+      return response.content as string;
+    } catch (error) {
+      console.error('Error checking foreshadowing:', error);
+      return 'I encountered an error while analyzing foreshadowing opportunities. Please try again, or consider manually reviewing your text for subtle hints and symbolic elements that could enhance future story developments.';
+    }
+  }
 
     // Enhanced character motivation and stakes evaluation
     async evaluateMotivationAndStakes(text: string, character: string, projectId?: string): Promise<string> {
@@ -368,9 +470,10 @@
           
           ${projectContext ? `
           PROJECT CONTEXT:
-          - Title: ${projectContext.title}
+          - Project ID: ${projectContext.projectId}
           - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
           - Themes: ${projectContext.themes?.join(', ') || 'None identified'}
+          - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
           ` : ''}
           
           WRITING ANALYSIS:
@@ -477,10 +580,23 @@
         context
       });
       
-      // Keep only last 20 messages to manage memory
-      if (memory.messages.length > 20) {
-        memory.messages = memory.messages.slice(-20);
-      }
+    // Keep only last 20 messages to manage memory
+    if (memory.messages.length > 20) {
+      memory.messages = memory.messages.slice(-20);
+    }
+    
+    // Clean up old conversation memories if we have too many
+    if (this.conversationMemory.size > this.MAX_CONVERSATION_MEMORY_SIZE) {
+      const oldestEntries = Array.from(this.conversationMemory.entries())
+        .sort(([, a], [, b]) => {
+          const lastA = a.messages[a.messages.length - 1]?.timestamp || '0';
+          const lastB = b.messages[b.messages.length - 1]?.timestamp || '0';
+          return lastA.localeCompare(lastB);
+        })
+        .slice(0, this.conversationMemory.size - this.MAX_CONVERSATION_MEMORY_SIZE);
+      
+      oldestEntries.forEach(([key]) => this.conversationMemory.delete(key));
+    }
     }
 
     // Intent classification
@@ -564,10 +680,11 @@
         
         ${projectContext ? `
         Project Context:
-        - Title: ${projectContext.title}
-        - Genre: ${projectContext.genre || 'Unknown'}
+        - Project ID: ${projectContext.projectId}
         - Themes: ${projectContext.themes?.join(', ') || 'None'}
         - Characters: ${projectContext.characters?.join(', ') || 'None'}
+        - Writing Style: ${projectContext.writingStyle || 'Unknown'}
+        - Settings: ${projectContext.settings?.join(', ') || 'None'}
         ` : ''}
         
         ${context ? `Current Writing Context: "${context}"` : ''}
@@ -623,11 +740,12 @@
         
         PROJECT CONTEXT:
         ${projectContext ? `
-        - Title: "${projectContext.title}"
-        - Genre: ${projectContext.genre || 'Not specified'}
+        - Project ID: "${projectContext.projectId}"
         - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
         - Themes: ${projectContext.themes?.join(', ') || 'None identified'}
         - Writing Style: ${projectContext.writingStyle || 'Not specified'}
+        - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
+        - Plot Points: ${projectContext.plotPoints?.join(', ') || 'None identified'}
         ` : 'No specific project context available.'}
         
         PROJECT STATISTICS:
@@ -644,10 +762,19 @@
         - Detected Themes: ${analysis.themes.join(', ')}
         - Characters Mentioned: ${analysis.characters.join(', ')}
         
+        ${relevantChunks.length > 0 ? `
         RELEVANT CONTEXT FROM PROJECT:
         ${relevantChunks.map((chunk, i) => `
         ${i + 1}. [${chunk.metadata.contentType || 'unknown'}] ${chunk.pageContent.slice(0, 300)}...
         `).join('\n')}
+        ` : projectContext ? `
+        RELEVANT CONTEXT FROM PROJECT:
+        Since this is a known project, provide suggestions that build upon the established elements above.
+        Consider how your suggestions can enhance the existing characters, themes, and settings.
+        ` : `
+        RELEVANT CONTEXT FROM PROJECT:
+        No specific project context available - provide general but helpful writing suggestions.
+        `}
         
         ${memory && memory.messages.length > 0 ? `
         RECENT CONVERSATION:
