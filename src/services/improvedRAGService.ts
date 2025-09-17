@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
+import { searchCache, projectCache, cacheService, CacheKeys } from './cacheService';
 
 const prisma = new PrismaClient();
 
@@ -117,7 +118,7 @@ export class ImprovedRAGService {
     }
   }
 
-  // Main search method with intelligent fallback
+  // Main search method with intelligent fallback and caching
   async intelligentSearch(query: string, options: SearchOptions = {}): Promise<{
     results: EnhancedDocument[];
     projectInsights?: any;
@@ -125,24 +126,57 @@ export class ImprovedRAGService {
   }> {
     console.log(`🔍 Starting intelligent search for: "${query}"`);
     
+    // Create cache key for search results
+    const cacheKey = CacheKeys.searchResults(query, options.projectId, {
+      limit: options.limit,
+      contentTypes: options.contentTypes,
+      themes: options.themes,
+      characters: options.characters
+    });
+    
+    // Try to get cached results first
+    const cachedResults = searchCache.get<{
+      results: EnhancedDocument[];
+      projectInsights?: any;
+      searchSummary?: any;
+    }>(cacheKey);
+    
+    if (cachedResults) {
+      console.log('🎯 Returning cached search results');
+      return cachedResults;
+    }
+    
+    let searchResults: {
+      results: EnhancedDocument[];
+      projectInsights?: any;
+      searchSummary?: any;
+    };
+    
     try {
       // Try vector-based search first
       if (this.vectorStore && this.embeddings) {
-        return await this.performVectorSearch(query, options);
+        searchResults = await this.performVectorSearch(query, options);
       } else {
         console.log('📝 Vector store unavailable, using fallback text search');
-        return await this.performFallbackSearch(query, options);
+        searchResults = await this.performFallbackSearch(query, options);
       }
     } catch (error: any) {
       // If we hit rate limits or other embedding errors, fallback to text search
       if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('rate limit')) {
         console.warn('⚠️ Embeddings rate limited, using fallback text search');
-        return await this.performFallbackSearch(query, options);
+        searchResults = await this.performFallbackSearch(query, options);
       } else {
         console.error("Error in intelligent search:", error);
         return { results: [] };
       }
     }
+    
+    // Cache the results for 5 minutes
+    if (searchResults.results.length > 0) {
+      searchCache.set(cacheKey, searchResults, 300);
+    }
+    
+    return searchResults;
   }
 
   // Vector-based search (original implementation)
@@ -721,7 +755,7 @@ Return only a number between 0.0 and 1.0.`;
     }
   }
 
-  // Analyze content and extract metadata
+  // Analyze content and extract metadata with improved caching
   private async analyzeContent(content: string, projectContext?: ProjectContext | null): Promise<{
     characters: string[];
     themes: string[];
@@ -729,23 +763,52 @@ Return only a number between 0.0 and 1.0.`;
     plotElements: string[];
     semanticTags: string[];
   }> {
-    // Check cache first
-    const cacheKey = `analysis_${this.hashContent(content)}_${projectContext?.projectId || 'none'}`;
+    const contentHash = this.hashContent(content);
+    const cacheKey = CacheKeys.ragAnalysis(contentHash, projectContext?.projectId);
+    
+    // Check external cache first
+    const cachedResult = cacheService.get<{
+      characters: string[];
+      themes: string[];
+      emotions: string[];
+      plotElements: string[];
+      semanticTags: string[];
+    }>(cacheKey);
+    
+    if (cachedResult) {
+      // Also update local cache for faster access
+      this.semanticCache.set(cacheKey, cachedResult);
+      return cachedResult;
+    }
+    
+    // Check local cache
     if (this.semanticCache.has(cacheKey)) {
-      return this.semanticCache.get(cacheKey);
+      const localResult = this.semanticCache.get(cacheKey);
+      // Update external cache
+      cacheService.set(cacheKey, localResult, 1800);
+      return localResult;
     }
 
     let result;
     
     try {
-      if (this.aiModel) {
+      if (this.aiModel && content.length > 100) { // Only use AI for substantial content
         result = await this.performAIContentAnalysis(content, projectContext);
       } else {
         result = this.performBasicContentAnalysis(content, projectContext);
       }
 
-      // Cache the result
+      // Cache the result in both caches
       this.semanticCache.set(cacheKey, result);
+      cacheService.set(cacheKey, result, 1800); // 30 minutes
+      
+      // Clean up local cache if it gets too large
+      if (this.semanticCache.size > 100) {
+        const entries = Array.from(this.semanticCache.entries());
+        // Remove oldest 20 entries
+        entries.slice(0, 20).forEach(([key]) => this.semanticCache.delete(key));
+      }
+      
       return result;
 
     } catch (error) {
@@ -753,6 +816,7 @@ Return only a number between 0.0 and 1.0.`;
       // Fallback to basic analysis
       result = this.performBasicContentAnalysis(content, projectContext);
       this.semanticCache.set(cacheKey, result);
+      cacheService.set(cacheKey, result, 900); // Shorter cache for fallback results
       return result;
     }
   }
@@ -906,26 +970,39 @@ Style: `;
     };
   }
 
-  // Project context management
+  // Project context management with caching
   async syncProjectContext(projectId: string): Promise<ProjectContext | null> {
     try {
+      // Check cache first
+      const cacheKey = CacheKeys.projectContext(projectId);
+      const cachedContext = projectCache.get<ProjectContext>(cacheKey);
+      
+      if (cachedContext) {
+        console.log(`🎯 Returning cached project context for ${projectId}`);
+        // Also update local cache
+        this.projectContexts.set(projectId, cachedContext);
+        return cachedContext;
+      }
+      
+      // Check local memory cache
+      const localContext = this.projectContexts.get(projectId);
+      if (localContext && (new Date().getTime() - localContext.lastUpdated.getTime()) < 30 * 60 * 1000) {
+        console.log(`💾 Returning local cached context for ${projectId}`);
+        // Update external cache
+        projectCache.set(cacheKey, localContext, 1800);
+        return localContext;
+      }
+      
+      console.log(`🔄 Syncing project context for ${projectId}...`);
+      
       const projectDocs = this.getProjectDocuments(projectId);
+      let projectContext: ProjectContext;
       
       if (projectDocs.length === 0) {
         console.log(`📊 No RAG documents found for project ${projectId}, fetching from database...`);
         
-        // Try to get project data from database
-        const project = await prisma.project.findUnique({
-          where: { id: projectId },
-          include: {
-            owner: {
-              select: {
-                id: true,
-                username: true
-              }
-            }
-          }
-        });
+        // Use cached database query
+        const project = await this.getCachedProject(projectId);
         
         if (!project || !project.content) {
           console.log(`❌ No project found or no content for project ${projectId}`);
@@ -934,10 +1011,15 @@ Style: `;
         
         console.log(`✅ Found project "${project.title}" with content, analyzing...`);
         
-        // Analyze the project content directly from database
-        const analysis = await this.analyzeProjectContent(project.content);
+        // Analyze the project content with caching
+        const analysisKey = CacheKeys.ragAnalysis(this.hashContent(project.content!), projectId);
+        const analysis = await cacheService.getOrSet(
+          analysisKey,
+          () => this.analyzeProjectContent(project.content!),
+          1800 // 30 minutes cache for analysis
+        );
         
-        const projectContext: ProjectContext = {
+        projectContext = {
           projectId,
           characters: analysis.characters,
           themes: analysis.themes,
@@ -947,42 +1029,79 @@ Style: `;
           toneAnalysis: analysis.toneAnalysis,
           lastUpdated: new Date()
         };
+      } else {
+        // Aggregate analysis from all project documents
+        const aggregatedContent = projectDocs.map(doc => doc.pageContent).join('\n\n');
+        const contentHash = this.hashContent(aggregatedContent);
         
-        this.projectContexts.set(projectId, projectContext);
-        console.log(`💾 Cached project context for ${projectId}:`, {
-          characters: projectContext.characters.length,
-          themes: projectContext.themes.length,
-          plotPoints: projectContext.plotPoints.length
+        const analysisKey = CacheKeys.ragAnalysis(contentHash, projectId);
+        const analysis = await cacheService.getOrSet(
+          analysisKey,
+          () => this.analyzeProjectContent(aggregatedContent),
+          1800
+        );
+
+        projectContext = {
+          projectId,
+          characters: analysis.characters,
+          themes: analysis.themes,
+          plotPoints: analysis.plotPoints,
+          settings: analysis.settings,
+          writingStyle: analysis.writingStyle,
+          toneAnalysis: analysis.toneAnalysis,
+          lastUpdated: new Date()
+        };
+
+        // Update database asynchronously
+        setImmediate(() => {
+          this.updateProjectContextInDB(projectId, analysis).catch(error => 
+            console.error('Error updating project context in DB:', error)
+          );
         });
-        
-        return projectContext;
       }
 
-      // Aggregate analysis from all project documents
-      const aggregatedContent = projectDocs.map(doc => doc.pageContent).join('\n\n');
-      const analysis = await this.analyzeProjectContent(aggregatedContent);
-
-      const projectContext: ProjectContext = {
-        projectId,
-        characters: analysis.characters,
-        themes: analysis.themes,
-        plotPoints: analysis.plotPoints,
-        settings: analysis.settings,
-        writingStyle: analysis.writingStyle,
-        toneAnalysis: analysis.toneAnalysis,
-        lastUpdated: new Date()
-      };
-
+      // Cache the context
       this.projectContexts.set(projectId, projectContext);
-
-      // Update database
-      await this.updateProjectContextInDB(projectId, analysis);
+      projectCache.set(cacheKey, projectContext, 1800); // 30 minutes
+      
+      console.log(`✅ Project context synced for ${projectId}:`, {
+        characters: projectContext.characters.length,
+        themes: projectContext.themes.length,
+        plotPoints: projectContext.plotPoints.length
+      });
 
       return projectContext;
     } catch (error) {
       console.error(`Error syncing project context for ${projectId}:`, error);
       return null;
     }
+  }
+  
+  // Get project with caching
+  private async getCachedProject(projectId: string) {
+    const cacheKey = `project:data:${projectId}`;
+    
+    return await projectCache.getOrSet(
+      cacheKey,
+      async () => {
+        return await prisma.project.findUnique({
+          where: { id: projectId },
+          select: {
+            id: true,
+            title: true,
+            content: true,
+            updatedAt: true,
+            owner: {
+              select: {
+                id: true,
+                username: true
+              }
+            }
+          }
+        });
+      },
+      900 // 15 minutes cache for project data
+    );
   }
 
   private async analyzeProjectContent(content: string): Promise<{
@@ -1005,7 +1124,7 @@ Style: `;
     };
   }
 
-  // Get project statistics
+  // Get project statistics with caching
   async getProjectStats(projectId: string): Promise<{
     totalDocuments: number;
     totalChunks: number;
@@ -1019,6 +1138,17 @@ Style: `;
     totalWordCount: number;
     lastUpdated?: Date;
   }> {
+    const cacheKey = CacheKeys.projectStats(projectId);
+    
+    return await projectCache.getOrSet(
+      cacheKey,
+      async () => this.calculateProjectStats(projectId),
+      900 // 15 minutes cache
+    );
+  }
+  
+  // Calculate project statistics (cached internally)
+  private calculateProjectStats(projectId: string) {
     const projectDocs = this.getProjectDocuments(projectId);
     
     const characters = new Set<string>();

@@ -1,6 +1,8 @@
   import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
   import { ImprovedRAGService, ProjectContext } from './improvedRAGService';
   import { PrismaClient } from '@prisma/client';
+  import { aiResponseCache, projectCache, CacheKeys } from './cacheService';
+  import { trackAICall } from './performanceService';
   import * as dotenv from "dotenv";
 
   dotenv.config();
@@ -51,13 +53,15 @@
       
       this.model = new ChatGoogleGenerativeAI({
         model: "gemini-2.0-flash",
-        maxOutputTokens: 2048,
+        maxOutputTokens: 1024, // Reduced from 2048 for speed
         apiKey: apiKey,
         temperature: 0.7,
+        timeout: 30000, // 30 second timeout
+        maxRetries: 1, // Reduce retries for speed
       });
     }
 
-    // Generate autocomplete suggestions (Copilot-like feature)
+    // Generate autocomplete suggestions (Copilot-like feature) with caching
     async generateAutocomplete(
       beforeCursor: string,
       afterCursor: string,
@@ -68,65 +72,45 @@
           return '';
         }
 
-        // Get the last few sentences for context
-        const contextLength = Math.min(beforeCursor.length, 500);
+        // Get the last few sentences for context (limit for performance)
+        const contextLength = Math.min(beforeCursor.length, 300); // Reduced from 500
         const context = beforeCursor.slice(-contextLength);
         
-        // Get project context if available
-        const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
-        const ragResults = projectId ? await improvedRAGService.intelligentSearch(context, {
+        // Create cache key for autocomplete
+        const cacheKey = CacheKeys.aiResponse(
+          `autocomplete:${context}:${afterCursor?.slice(0, 50) || ''}:${projectId || 'none'}`,
+          'gemini-2.0-flash'
+        );
+        
+        // Try to get cached result first
+        const cachedSuggestion = aiResponseCache.get<string>(cacheKey);
+        if (cachedSuggestion) {
+          console.log('🎯 Returning cached autocomplete suggestion');
+          return cachedSuggestion;
+        }
+        
+        console.log('🔄 Generating new autocomplete suggestion...');
+        
+        // Get project context from cache or generate
+        const projectContext = projectId ? await this.getCachedProjectContext(projectId) : null;
+        
+        // Limit RAG search for performance (only 1 result for autocomplete)
+        const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch(context, {
           projectId,
-          limit: 2,
-          includeContext: true
+          limit: 1,
+          includeContext: false // Reduce overhead
         }) : null;
         const relevantChunks = ragResults?.results || [];
         
-        // Analyze the current writing style
-        const analysis = this.analyzeWriting(beforeCursor);
+        // Quick analysis for autocomplete (simplified)
+        const analysis = this.analyzeWritingQuick(beforeCursor);
         
-        // Build autocomplete prompt
-        const prompt = `
-          You are an AI writing assistant providing autocomplete suggestions. Generate a natural continuation that:
-          1. Maintains the current writing style and tone
-          2. Flows naturally from the existing text
-          3. Is contextually appropriate
-          4. Provides 1-3 words or a short phrase (maximum 20 words)
-          5. Fixes any obvious spelling mistakes in the last word if needed
-          
-          ${projectContext ? `
-          PROJECT CONTEXT:
-          - Project ID: ${projectContext.projectId}
-          - Characters: ${projectContext.characters?.join(', ') || 'None'}
-          - Themes: ${projectContext.themes?.join(', ') || 'None'}
-          - Writing Style: ${projectContext.writingStyle || 'Unknown'}
-          - Settings: ${projectContext.settings?.join(', ') || 'None'}
-          ` : ''}
-          
-          WRITING STYLE ANALYSIS:
-          - Tone: ${analysis.tone}
-          - Pacing: ${analysis.pacing}
-          - Average sentence length: ${analysis.wordCount / Math.max(analysis.sentenceCount, 1)}
-          
-          ${relevantChunks.length > 0 ? `
-          RELEVANT PROJECT CONTENT:
-          ${relevantChunks.map(chunk => chunk.pageContent.slice(0, 150)).join('\n')}
-          ` : ''}
-          
-          TEXT BEFORE CURSOR:
-          "${context}"
-          
-          ${afterCursor ? `TEXT AFTER CURSOR: "${afterCursor.slice(0, 100)}"` : ''}
-          
-          Provide ONLY the autocomplete suggestion text, nothing else. Keep it short and natural.
-        `;
-
-        const response = await this.model.invoke(prompt);
-        let suggestion = (response.content as string).trim();
+        const suggestion = await this.generateAutocompleteSuggestion(
+          context, afterCursor, projectContext, relevantChunks, analysis
+        );
         
-        // Clean up the suggestion
-        suggestion = suggestion.replace(/^["']|["']$/g, ''); // Remove quotes
-        suggestion = suggestion.replace(/\n.*$/, ''); // Take only first line
-        suggestion = suggestion.slice(0, 100); // Limit length
+        // Cache the result for 5 minutes
+        aiResponseCache.set(cacheKey, suggestion, 300);
         
         return suggestion;
       } catch (error) {
@@ -134,8 +118,81 @@
         return '';
       }
     }
+    
+    // Internal method for generating autocomplete suggestions
+    private async generateAutocompleteSuggestion(
+      context: string,
+      afterCursor: string,
+      projectContext: ProjectContext | null,
+      relevantChunks: any[],
+      analysis: any
+    ): Promise<string> {
+      // Get the last few words to understand what we're continuing
+      const contextWords = context.trim().split(/\s+/);
+      const lastWords = contextWords.slice(-5).join(' '); // Last 5 words for context
+      
+      const prompt = `Complete this text with 1-5 words only. Just continue naturally:
 
-    // Enhanced suggestion generation with project context and conversation memory
+Text ending: "${lastWords}"
+${afterCursor ? `What comes next: "${afterCursor.slice(0, 30)}..."\n` : ''}
+
+Provide ONLY the next few words (maximum 5 words). Do not repeat the text. Do not add quotes or explanations.
+
+Continuation:`;
+
+      const response = await trackAICall(
+        () => this.model!.invoke(prompt),
+        'Autocomplete Generation'
+      );
+      let suggestion = (response.content as string).trim();
+      
+      // Clean up the suggestion very aggressively for autocomplete
+      suggestion = suggestion.replace(/^["'`]|["'`]$/g, ''); // Remove quotes
+      suggestion = suggestion.replace(/^(continuation:|complete:|next:)/i, '').trim(); // Remove instruction words
+      suggestion = suggestion.split('\n')[0]; // First line only
+      suggestion = suggestion.split('.')[0]; // Don't include full sentences
+      
+      // Ensure it's short (max 5 words for autocomplete)
+      const words = suggestion.trim().split(/\s+/);
+      if (words.length > 5) {
+        suggestion = words.slice(0, 5).join(' ');
+      }
+      
+      // Don't return anything if it's too long or contains the original text
+      if (suggestion.length > 30 || suggestion.includes(lastWords)) {
+        return '';
+      }
+      
+      return suggestion;
+    }
+    
+    // Quick analysis for autocomplete (performance optimized)
+    private analyzeWritingQuick(text: string): { tone: string; pacing: string } {
+      const lowerText = text.toLowerCase();
+      
+      let tone = 'neutral';
+      if (lowerText.includes('love') || lowerText.includes('heart')) tone = 'romantic';
+      else if (lowerText.includes('dark') || lowerText.includes('death')) tone = 'dark';
+      else if (lowerText.includes('funny') || lowerText.includes('laugh')) tone = 'humorous';
+      
+      const avgLength = text.split('.').reduce((acc, s) => acc + s.length, 0) / Math.max(text.split('.').length, 1);
+      const pacing = avgLength < 50 ? 'fast' : avgLength > 100 ? 'slow' : 'moderate';
+      
+      return { tone, pacing };
+    }
+    
+    // Get project context with caching
+    private async getCachedProjectContext(projectId: string): Promise<ProjectContext | null> {
+      const cacheKey = CacheKeys.projectContext(projectId);
+      
+      return await projectCache.getOrSet(
+        cacheKey,
+        () => improvedRAGService.syncProjectContext(projectId),
+        1800 // 30 minutes cache
+      );
+    }
+
+    // Enhanced suggestion generation with project context and conversation memory (with caching)
     async generateSuggestions(
       context: string,
       projectId: string,
@@ -147,36 +204,59 @@
         }
 
         console.log(`🎯 Generating suggestions for project: ${projectId}`);
+        
+        // Create cache key for suggestions (less aggressive caching than autocomplete)
+        const contextHash = context.slice(0, 200); // Use first 200 chars for cache key
+        const cacheKey = CacheKeys.aiResponse(
+          `suggestions:${contextHash}:${projectId}:${userId || 'anon'}`,
+          'gemini-2.0-flash'
+        );
+        
+        // Check cache first (shorter TTL for suggestions as they should be more dynamic)
+        const cachedSuggestion = aiResponseCache.get<string>(cacheKey);
+        if (cachedSuggestion) {
+          console.log('🎯 Returning cached suggestions');
+          return cachedSuggestion;
+        }
 
-        // Get project context - this will fetch from database if no RAG documents exist
-        const projectContext = await improvedRAGService.syncProjectContext(projectId);
+        // Get project context from cache
+        const projectContext = await this.getCachedProjectContext(projectId);
         console.log(`📋 Project context retrieved:`, projectContext ? 'Found' : 'Not found');
         
-        // Try to get relevant chunks from RAG, but don't fail if none exist
+        // Try to get relevant chunks from RAG with reduced overhead
         let relevantChunks: any[] = [];
         let projectStats: any = { totalChunks: 0, characters: [], themes: [], contentTypes: [] };
         
         try {
+          // Reduce RAG search limit for better performance
           const ragResults = await improvedRAGService.intelligentSearch(context, {
             projectId,
-            limit: 5,
-            includeContext: true
+            limit: 3, // Reduced from 5
+            includeContext: false // Reduce overhead
           });
           relevantChunks = ragResults.results || [];
-          projectStats = await improvedRAGService.getProjectStats(projectId);
+          
+          // Get project stats from cache
+          const statsCacheKey = CacheKeys.projectStats(projectId);
+          projectStats = await projectCache.getOrSet(
+            statsCacheKey,
+            () => improvedRAGService.getProjectStats(projectId),
+            900 // 15 minutes cache for stats
+          );
+          
           console.log(`🔍 RAG search found ${relevantChunks.length} relevant chunks`);
         } catch (ragError) {
           console.log(`⚠️ RAG search failed, proceeding with project context only`);
         }
         
-        // Get conversation memory for personalization
+        // Get conversation memory for personalization (with size limit for performance)
         const memory = userId ? await this.getConversationMemory(userId, projectId) : null;
         
-        // Analyze the current writing
-        const analysis = this.analyzeWriting(context);
+        // Use optimized analysis for better performance
+        const analysis = this.analyzeWritingOptimized(context);
         
-        // Build comprehensive context-aware prompt
-        const prompt = this.buildIntelligentPrompt({
+        // Build optimized context-aware prompt
+        const prompt = this.buildOptimizedPrompt({
           context,
           projectId,
           projectContext,
@@ -188,15 +268,23 @@
         });
 
         console.log(`🤖 Invoking AI model for suggestions...`);
-        const response = await this.model.invoke(prompt);
+        const response = await trackAICall(
+          () => this.model!.invoke(prompt),
+          'Suggestions Generation'
+        );
         const suggestions = response.content as string;
         
         console.log(`✅ AI suggestions generated successfully`);
         
-        // Store in conversation memory
+        // Cache the result for 10 minutes (shorter than autocomplete)
+        aiResponseCache.set(cacheKey, suggestions, 600);
+        
+        // Store in conversation memory (async to not block response)
         if (userId) {
-          await this.updateConversationMemory(userId, projectId, 'user', context);
-          await this.updateConversationMemory(userId, projectId, 'assistant', suggestions);
+          setImmediate(async () => {
+            await this.updateConversationMemory(userId, projectId, 'user', context.slice(0, 500));
+            await this.updateConversationMemory(userId, projectId, 'assistant', suggestions.slice(0, 500));
+          });
         }
         
         return suggestions;
@@ -206,7 +294,149 @@
       }
     }
 
-    // Intelligent writing analysis
+  // Optimized writing analysis for performance
+    analyzeWritingOptimized(text: string): WritingAnalysis {
+      // Use cached result if available
+      const textHash = text.substring(0, 100); // Use first 100 chars as hash
+      const cacheKey = `analysis:${textHash.replace(/\s+/g, '_')}`;
+      
+      // Check if we've analyzed similar text recently
+      if (this.writingPatterns.has(cacheKey)) {
+        return this.writingPatterns.get(cacheKey);
+      }
+      
+      const analysis = this.performFastAnalysis(text);
+      
+      // Cache the analysis
+      this.writingPatterns.set(cacheKey, analysis);
+      
+      // Clean up cache if it gets too large
+      if (this.writingPatterns.size > this.MAX_WRITING_PATTERNS_SIZE) {
+        const entries = Array.from(this.writingPatterns.entries());
+        // Remove oldest entries
+        entries.slice(0, 10).forEach(([key]) => this.writingPatterns.delete(key));
+      }
+      
+      return analysis;
+    }
+    
+    // Fast analysis implementation
+    private performFastAnalysis(text: string): WritingAnalysis {
+      const words = text.split(/\s+/).filter(word => word.length > 0);
+      const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);
+      const paragraphs = text.split(/\n\s*\n/).filter(p => p.trim().length > 0);
+      
+      // Simplified calculations for performance
+      const avgWordsPerSentence = words.length / Math.max(sentences.length, 1);
+      const readabilityScore = Math.max(0, Math.min(100, 100 - avgWordsPerSentence * 2));
+      
+      return {
+        wordCount: words.length,
+        characterCount: text.length,
+        paragraphCount: paragraphs.length,
+        sentenceCount: sentences.length,
+        readabilityScore,
+        tone: this.analyzeToneQuick(text),
+        pacing: avgWordsPerSentence < 15 ? 'fast' : avgWordsPerSentence > 25 ? 'slow' : 'moderate',
+        themes: this.extractThemesQuick(text),
+        characters: this.extractCharactersQuick(text),
+        plotPoints: this.extractPlotPointsQuick(text)
+      };
+    }
+    
+    // Quick tone analysis
+    private analyzeToneQuick(text: string): string {
+      const lowerText = text.toLowerCase();
+      
+      if (lowerText.match(/\b(death|dark|fear|evil)\b/)) return 'dark';
+      if (lowerText.match(/\b(love|heart|romance|kiss)\b/)) return 'romantic';
+      if (lowerText.match(/\b(funny|laugh|humor|joke)\b/)) return 'humorous';
+      if (lowerText.match(/\b(mystery|secret|hidden|unknown)\b/)) return 'mysterious';
+      if (lowerText.match(/\b(action|fight|battle|chase)\b/)) return 'action';
+      
+      return 'neutral';
+    }
+    
+    // Quick theme extraction
+    private extractThemesQuick(text: string): string[] {
+      const themes: string[] = [];
+      const lowerText = text.toLowerCase();
+      
+      if (lowerText.includes('love') || lowerText.includes('heart')) themes.push('love');
+      if (lowerText.includes('friend') || lowerText.includes('loyal')) themes.push('friendship');
+      if (lowerText.includes('family') || lowerText.includes('mother') || lowerText.includes('father')) themes.push('family');
+      if (lowerText.includes('power') || lowerText.includes('control')) themes.push('power');
+      if (lowerText.includes('betray') || lowerText.includes('lie')) themes.push('betrayal');
+      
+      return themes.slice(0, 3); // Limit to 3 themes for performance
+    }
+    
+    // Quick character extraction
+    private extractCharactersQuick(text: string): string[] {
+      const words = text.split(/\s+/);
+      const characters = new Set<string>();
+      
+      // Look for capitalized words that might be names (simplified)
+      words.forEach(word => {
+        const cleanWord = word.replace(/[^\w]/g, '');
+        if (cleanWord.length > 2 && 
+            cleanWord[0] === cleanWord[0].toUpperCase() && 
+            cleanWord.slice(1) === cleanWord.slice(1).toLowerCase() &&
+            !['The', 'And', 'But', 'For', 'This', 'That'].includes(cleanWord)) {
+          characters.add(cleanWord);
+        }
+      });
+      
+      return Array.from(characters).slice(0, 5); // Limit to 5 characters
+    }
+    
+    // Quick plot points extraction
+    private extractPlotPointsQuick(text: string): string[] {
+      const plotPoints: string[] = [];
+      const lowerText = text.toLowerCase();
+      
+      if (lowerText.includes('meet') || lowerText.includes('encounter')) plotPoints.push('meeting');
+      if (lowerText.includes('fight') || lowerText.includes('conflict')) plotPoints.push('conflict');
+      if (lowerText.includes('discover') || lowerText.includes('reveal')) plotPoints.push('revelation');
+      if (lowerText.includes('escape') || lowerText.includes('flee')) plotPoints.push('escape');
+      if (lowerText.includes('journey') || lowerText.includes('travel')) plotPoints.push('journey');
+      
+      return plotPoints.slice(0, 3); // Limit for performance
+    }
+    
+    // Build optimized prompt (shorter and more focused)
+    private buildOptimizedPrompt(params: {
+      context: string;
+      projectId: string;
+      projectContext: ProjectContext | null;
+      relevantChunks: any[];
+      projectStats: any;
+      memory: ConversationMemory | null;
+      analysis: WritingAnalysis;
+      requestType: string;
+    }): string {
+      const { context, projectContext, relevantChunks, analysis } = params;
+      
+      // Build a more concise prompt for better performance
+      return `You are an expert AI writing assistant. Provide helpful writing suggestions for this text.
+
+${projectContext ? `PROJECT: "${projectContext.projectId}" - Style: ${projectContext.writingStyle || 'standard'}, Themes: ${projectContext.themes?.slice(0, 2).join(', ') || 'none'}\n` : ''}
+${relevantChunks.length > 0 ? `REFERENCE: ${relevantChunks[0].pageContent.slice(0, 200)}...\n` : ''}
+WRITING: Tone: ${analysis.tone}, ${analysis.wordCount} words, ${analysis.readabilityScore.toFixed(0)}/100 readability
+
+TEXT:
+"${context.slice(0, 1000)}${context.length > 1000 ? '...' : ''}"
+
+Provide 3-4 specific, actionable suggestions to improve this writing. Focus on:
+1. Flow and readability
+2. Character development
+3. Plot advancement
+4. Thematic depth
+
+Be concise but helpful.`;
+    }
+  
+  // Original detailed analysis (keep for compatibility)
     analyzeWriting(text: string): WritingAnalysis {
       const words = text.split(/\s+/).filter(word => word.length > 0);
       const sentences = text.split(/[.!?]+/).filter(s => s.trim().length > 0);

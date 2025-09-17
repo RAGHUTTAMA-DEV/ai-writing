@@ -5,6 +5,7 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import { logger, requestLogger, errorHandler } from './utils/logger';
+import { performanceService } from './services/performanceService';
 
 // Import routes
 import authRoutes from './routes/authRoutes';
@@ -24,6 +25,7 @@ const PORT: number = parseInt(process.env.PORT || '5000', 10);
 app.use(helmet()); // Security headers
 app.use(cors()); // Enable CORS
 app.use(requestLogger); // Enhanced logging
+app.use(performanceService.requestTracker); // Performance monitoring
 
 // Rate limiting
 const limiter = rateLimit({
@@ -44,9 +46,25 @@ app.use('/api/ai', aiRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/enhanced-chatbot', enhancedChatbotRoutes);
 
-// Health check endpoint
+// Health check endpoint with performance metrics
 app.get('/health', (req: Request, res: Response) => {
-  res.status(200).json({ status: 'OK', timestamp: new Date().toISOString() });
+  const health = performanceService.getHealthStatus();
+  const stats = performanceService.getStats();
+  
+  res.status(health.status === 'critical' ? 503 : 200).json({ 
+    status: health.status,
+    timestamp: new Date().toISOString(),
+    uptime: health.uptime,
+    memoryPressure: health.memoryPressure,
+    issues: health.issues,
+    performance: {
+      avgResponseTime: stats.avgResponseTime,
+      totalRequests: stats.totalRequests,
+      cacheHitRate: stats.cacheStats.hitRate,
+      apiCallsSuccess: stats.apiCalls.successful,
+      apiCallsTotal: stats.apiCalls.total
+    }
+  });
 });
 
 // Enhanced error handling middleware
@@ -70,7 +88,11 @@ app.listen(PORT, () => {
     logger.cleanupOldLogs();
   }, 24 * 60 * 60 * 1000);
   
+  // Start performance monitoring
+  performanceService.startPeriodicLogging(5); // Log every 5 minutes
+  
   logger.info('AI Writing Platform is ready to serve requests');
+  logger.info('Performance monitoring started');
 });
 
 export default app;

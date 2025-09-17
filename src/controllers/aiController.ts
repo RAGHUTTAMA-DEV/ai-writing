@@ -37,8 +37,13 @@ class AIController {
 
       res.json({
         message: 'Autocomplete suggestion generated',
-        suggestion,
-        cursorPosition
+        suggestion: suggestion || '', // Ensure we always return a string
+        cursorPosition,
+        // Additional info for frontend to handle properly
+        insertAt: cursorPosition,
+        replaceLength: 0, // Don't replace any existing text
+        beforeCursor: beforeCursor.slice(-20), // Last 20 chars for context
+        afterCursor: afterCursor.slice(0, 20) // Next 20 chars for context
       });
     } catch (error) {
       console.error('Error generating autocomplete:', error);

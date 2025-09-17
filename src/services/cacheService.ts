@@ -44,7 +44,10 @@ export class CacheService {
   // Set value with optional TTL override
   set(key: string, value: any, ttl?: number): boolean {
     console.log(`💾 Caching key: ${key}`);
-    return this.cache.set(key, value, ttl);
+    if (ttl !== undefined) {
+      return this.cache.set(key, value, ttl);
+    }
+    return this.cache.set(key, value);
   }
 
   // Get value from cache
@@ -53,10 +56,20 @@ export class CacheService {
     
     if (value !== undefined) {
       this.hits++;
+      // Track cache hit for performance monitoring
+      try {
+        const { performanceService } = require('./performanceService');
+        performanceService.trackCacheHit();
+      } catch (e) { /* Ignore if performance service not available */ }
       console.log(`🎯 Cache hit: ${key}`);
       return value;
     } else {
       this.misses++;
+      // Track cache miss for performance monitoring
+      try {
+        const { performanceService } = require('./performanceService');
+        performanceService.trackCacheMiss();
+      } catch (e) { /* Ignore if performance service not available */ }
       console.log(`❌ Cache miss: ${key}`);
       return undefined;
     }
@@ -128,7 +141,12 @@ export class CacheService {
 
   // Update TTL for existing key
   touch(key: string, ttl?: number): boolean {
-    return this.cache.touch(key, ttl);
+    // NodeCache doesn't have touch method, so we'll get and set again
+    const value = this.cache.get(key);
+    if (value !== undefined) {
+      return this.set(key, value, ttl);
+    }
+    return false;
   }
 
   // Periodic cleanup and optimization
@@ -138,9 +156,12 @@ export class CacheService {
     
     // If cache is getting too full, clear old entries
     if (stats.keys > 1000) {
-      console.log('🧹 Cache size limit reached, clearing expired entries');
-      // NodeCache automatically handles this, but we can force it
-      this.cache.prune();
+      console.log('🧹 Cache size limit reached, clearing some entries');
+      // NodeCache automatically handles expired entries, but we can force cleanup
+      const keys = this.cache.keys();
+      // Remove 10% of oldest entries
+      const keysToRemove = keys.slice(0, Math.floor(keys.length * 0.1));
+      this.cache.del(keysToRemove);
     }
 
     // Reset hit/miss counters if they get too large

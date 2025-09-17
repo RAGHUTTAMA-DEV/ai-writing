@@ -262,8 +262,24 @@ class APIService {
     });
   }
 
-  async generateAutocomplete(text: string, cursorPosition: number, projectId?: string, signal?: AbortSignal): Promise<{ suggestion: string; cursorPosition: number }> {
-    return this.request<{ suggestion: string; cursorPosition: number }>('/ai/autocomplete', {
+  async generateAutocomplete(text: string, cursorPosition: number, projectId?: string, signal?: AbortSignal): Promise<{
+    message: string;
+    suggestion: string;
+    cursorPosition: number;
+    insertAt: number;
+    replaceLength: number;
+    beforeCursor: string;
+    afterCursor: string;
+  }> {
+    return this.request<{
+      message: string;
+      suggestion: string;
+      cursorPosition: number;
+      insertAt: number;
+      replaceLength: number;
+      beforeCursor: string;
+      afterCursor: string;
+    }>('/ai/autocomplete', {
       method: 'POST',
       body: JSON.stringify({ text, cursorPosition, projectId }),
       signal, // Add abort signal support
