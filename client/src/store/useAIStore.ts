@@ -18,10 +18,11 @@ interface AIState {
   } | null;
   loading: boolean;
   error: string | null;
-  generateSuggestions: (projectId: string, context: string) => Promise<void>;
-  analyzeThemeConsistency: (text: string, theme: string, projectId?: string) => Promise<void>;
-  checkForeshadowing: (text: string, context?: string, projectId?: string) => Promise<void>;
-  evaluateMotivationAndStakes: (text: string, character: string, projectId?: string) => Promise<void>;
+  // Enhanced methods with analysis mode support
+  generateSuggestions: (projectId: string, context: string, analysisMode?: 'fast' | 'deep') => Promise<void>;
+  analyzeThemeConsistency: (text: string, theme: string, projectId?: string, analysisMode?: 'fast' | 'deep') => Promise<void>;
+  checkForeshadowing: (text: string, context?: string, projectId?: string, analysisMode?: 'fast' | 'deep') => Promise<void>;
+  evaluateMotivationAndStakes: (text: string, character: string, projectId?: string, analysisMode?: 'fast' | 'deep') => Promise<void>;
   searchRAG: (query: string, projectId?: string, limit?: number) => Promise<void>;
   clearSuggestions: () => void;
   clearThemeAnalysis: () => void;
@@ -43,9 +44,10 @@ export const useAIStore = create<AIState>()(
       loading: false,
       error: null,
 
-      generateSuggestions: async (projectId: string, context: string) => {
+      generateSuggestions: async (projectId: string, context: string, analysisMode: 'fast' | 'deep' = 'fast') => {
         try {
           set({ loading: true, error: null });
+          console.log(`🎯 AI Store: Generating suggestions in ${analysisMode} mode`);
           
           // Add timeout to prevent stuck loading state
           const timeoutId = setTimeout(() => {
@@ -54,11 +56,12 @@ export const useAIStore = create<AIState>()(
               loading: false, 
               error: 'Request timed out. Please try again.'
             });
-          }, 30000); // 30 second timeout
+          }, analysisMode === 'deep' ? 45000 : 30000); // Longer timeout for deep analysis
           
-          const response = await apiService.generateAISuggestions(projectId, context);
+          const response = await apiService.generateAISuggestions(projectId, context, analysisMode);
           clearTimeout(timeoutId);
           
+          console.log(`✅ AI Store: Suggestions generated successfully (${response.analysisMode || analysisMode} mode)`);
           set(state => ({
             suggestions: [...state.suggestions, response.suggestions],
             loading: false
@@ -72,10 +75,12 @@ export const useAIStore = create<AIState>()(
         }
       },
 
-      analyzeThemeConsistency: async (text: string, theme: string, projectId?: string) => {
+      analyzeThemeConsistency: async (text: string, theme: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast') => {
         try {
           set({ loading: true, error: null });
-          const response = await apiService.analyzeThemeConsistency(text, theme, projectId);
+          console.log(`🎯 AI Store: Analyzing theme consistency in ${analysisMode} mode`);
+          const response = await apiService.analyzeThemeConsistency(text, theme, projectId, analysisMode);
+          console.log(`✅ AI Store: Theme analysis completed (${response.analysisMode || analysisMode} mode)`);
           set(state => ({
             themeAnalysis: [...state.themeAnalysis, response.analysis],
             loading: false
@@ -89,10 +94,12 @@ export const useAIStore = create<AIState>()(
         }
       },
 
-      checkForeshadowing: async (text: string, context?: string, projectId?: string) => {
+      checkForeshadowing: async (text: string, context?: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast') => {
         try {
           set({ loading: true, error: null });
-          const response = await apiService.checkForeshadowing(text, context, projectId);
+          console.log(`🔮 AI Store: Checking foreshadowing in ${analysisMode} mode`);
+          const response = await apiService.checkForeshadowing(text, context, projectId, analysisMode);
+          console.log(`✅ AI Store: Foreshadowing analysis completed (${response.analysisMode || analysisMode} mode)`);
           set(state => ({
             foreshadowing: [...state.foreshadowing, response.foreshadowing],
             loading: false
@@ -106,10 +113,12 @@ export const useAIStore = create<AIState>()(
         }
       },
 
-      evaluateMotivationAndStakes: async (text: string, character: string, projectId?: string) => {
+      evaluateMotivationAndStakes: async (text: string, character: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast') => {
         try {
           set({ loading: true, error: null });
-          const response = await apiService.evaluateMotivationAndStakes(text, character, projectId);
+          console.log(`🎭 AI Store: Evaluating motivation and stakes in ${analysisMode} mode`);
+          const response = await apiService.evaluateMotivationAndStakes(text, character, projectId, analysisMode);
+          console.log(`✅ AI Store: Character analysis completed (${response.analysisMode || analysisMode} mode)`);
           set(state => ({
             motivationStakes: [...state.motivationStakes, response.evaluation],
             loading: false

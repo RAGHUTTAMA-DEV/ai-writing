@@ -55,11 +55,13 @@ interface UpdateProjectRequest {
 interface AISuggestionRequest {
   projectId: string;
   context: string;
+  analysisMode?: 'fast' | 'deep';
 }
 
 interface AISuggestionResponse {
   message: string;
   suggestions: string;
+  analysisMode?: 'fast' | 'deep';
 }
 
 interface ChatbotSuggestionRequest {
@@ -84,33 +86,39 @@ interface ThemeConsistencyRequest {
   text: string;
   theme: string;
   projectId?: string;
+  analysisMode?: 'fast' | 'deep';
 }
 
 interface ThemeConsistencyResponse {
   message: string;
   analysis: string;
+  analysisMode?: 'fast' | 'deep';
 }
 
 interface ForeshadowingRequest {
   text: string;
   context?: string;
   projectId?: string;
+  analysisMode?: 'fast' | 'deep';
 }
 
 interface ForeshadowingResponse {
   message: string;
   foreshadowing: string;
+  analysisMode?: 'fast' | 'deep';
 }
 
 interface MotivationStakesRequest {
   text: string;
   character: string;
   projectId?: string;
+  analysisMode?: 'fast' | 'deep';
 }
 
 interface MotivationStakesResponse {
   message: string;
   evaluation: string;
+  analysisMode?: 'fast' | 'deep';
 }
 
 interface RAGAddProjectRequest {
@@ -255,10 +263,10 @@ class APIService {
   }
 
   // AI endpoints
-  async generateAISuggestions(projectId: string, context: string): Promise<AISuggestionResponse> {
+  async generateAISuggestions(projectId: string, context: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<AISuggestionResponse> {
     return this.request<AISuggestionResponse>('/ai/suggestions', {
       method: 'POST',
-      body: JSON.stringify({ projectId, context }),
+      body: JSON.stringify({ projectId, context, analysisMode }),
     });
   }
 
@@ -286,24 +294,24 @@ class APIService {
     });
   }
 
-  async analyzeThemeConsistency(text: string, theme: string, projectId?: string): Promise<ThemeConsistencyResponse> {
+  async analyzeThemeConsistency(text: string, theme: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<ThemeConsistencyResponse> {
     return this.request<ThemeConsistencyResponse>('/ai/theme-consistency', {
       method: 'POST',
-      body: JSON.stringify({ text, theme, projectId }),
+      body: JSON.stringify({ text, theme, projectId, analysisMode }),
     });
   }
 
-  async checkForeshadowing(text: string, context?: string, projectId?: string): Promise<ForeshadowingResponse> {
+  async checkForeshadowing(text: string, context?: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<ForeshadowingResponse> {
     return this.request<ForeshadowingResponse>('/ai/foreshadowing', {
       method: 'POST',
-      body: JSON.stringify({ text, context, projectId }),
+      body: JSON.stringify({ text, context, projectId, analysisMode }),
     });
   }
 
-  async evaluateMotivationAndStakes(text: string, character: string, projectId?: string): Promise<MotivationStakesResponse> {
+  async evaluateMotivationAndStakes(text: string, character: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<MotivationStakesResponse> {
     return this.request<MotivationStakesResponse>('/ai/motivation-stakes', {
       method: 'POST',
-      body: JSON.stringify({ text, character, projectId }),
+      body: JSON.stringify({ text, character, projectId, analysisMode }),
     });
   }
 

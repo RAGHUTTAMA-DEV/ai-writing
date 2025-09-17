@@ -35,7 +35,7 @@
     plotPoints: string[];
   }
 
-class AIService {
+export class AIService {
     private model: ChatGoogleGenerativeAI;
   private conversationMemory: Map<string, ConversationMemory> = new Map();
   private writingPatterns: Map<string, any> = new Map();
@@ -548,44 +548,91 @@ Provide specific, implementable advice that will help the writer create more eng
     }
 
   // Deep theme consistency analysis with narrative expertise
-  async analyzeThemeConsistency(text: string, theme: string, projectId?: string): Promise<string> {
+  // HYBRID MODE: Supports both fast (text-based) and deep (embedding-based) analysis
+  async analyzeThemeConsistency(text: string, theme: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<string> {
     if (!this.model) {
       return 'AI features are not available due to missing API key configuration.';
     }
     
     try {
-      // OPTIMIZED RAG for speed
-      const projectContext = projectId ? await this.getCachedProjectContext(projectId) : null;
-      const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch(`${theme} thematic elements`, {
-        projectId,
-        limit: 1, // Reduced from 5 to 1
-        themes: [theme],
-        includeContext: false
-      }) : null;
-      const relevantChunks = ragResults?.results || [];
-      const analysis = this.analyzeWriting(text);
+      console.log(`🎯 Analyzing theme consistency for "${theme}" in project: ${projectId} (${analysisMode} mode)`);
       
-      // DETAILED THEME ANALYSIS
-      const prompt = `
-        As a literary analysis expert, provide a comprehensive theme consistency analysis.
-        
-        ${projectContext ? `
-        PROJECT CONTEXT:
-        - Project ID: ${projectContext.projectId}
-        - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
-        - Existing Themes: ${projectContext.themes?.join(', ') || 'None identified'}
-        - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
-        ` : ''}
+      // HYBRID ANALYSIS MODE: Fast vs Deep
+      let relevantChunks: any[] = [];
+      let projectFullContent = '';
+      
+      // 1. Get project context and stats (always needed)
+      const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
+      const projectStats = projectId ? await improvedRAGService.getProjectStats(projectId) : {
+        characters: [] as string[], 
+        themes: [] as string[], 
+        plotElements: [] as string[], 
+        totalChunks: 0
+      };
+      console.log(`📋 Project context retrieved:`, projectContext ? 'Found' : 'Not found');
+      console.log(`📊 Project stats: ${projectStats.themes.length} themes total`);
+      
+      // 2. Get actual project content for richer AI context
+      if (projectId) {
+        try {
+          const project = await prisma.project.findUnique({
+            where: { id: projectId },
+            select: { content: true, title: true, description: true }
+          });
+          
+          if (project?.content) {
+            projectFullContent = project.content;
+            console.log(`📜 Retrieved full project content for theme analysis: ${projectFullContent.length} characters`);
+          }
+        } catch (error) {
+          console.log(`⚠️ Could not retrieve full project content:`, error);
+        }
+      }
+      
+      // 3. Mode-specific analysis
+      if (analysisMode === 'deep') {
+        console.log(`🔍 DEEP MODE: Using embedding-based RAG search for detailed theme analysis...`);
+        try {
+          const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch(`${theme} thematic elements narrative`, {
+            projectId,
+            limit: 4, // More chunks for deep theme analysis
+            themes: [theme],
+            includeContext: true
+          }) : null;
+          relevantChunks = ragResults?.results || [];
+          console.log(`🔍 Deep search found ${relevantChunks.length} relevant chunks for theme "${theme}"`);
+        } catch (ragError) {
+          console.log(`⚠️ Deep search failed, falling back to fast mode`);
+        }
+      } else {
+        console.log(`⚡ FAST MODE: Using direct project context for theme analysis (no embedding search)`);
+      }
+      
+      const analysis = this.analyzeWriting(text);
+      console.log(`📝 Theme analysis complete for ${analysisMode} mode`);
+      
+      // Check if theme exists in project
+      const themeExistsInProject = projectStats.themes.some((t: string) => 
+        t.toLowerCase().includes(theme.toLowerCase()) || theme.toLowerCase().includes(t.toLowerCase())
+      );
+      
+      // Build enhanced theme analysis prompt with rich context
+      const prompt = this.buildEnhancedPrompt({
+        context: text,
+        projectId: projectId || 'unknown',
+        projectContext,
+        projectStats,
+        projectFullContent,
+        relevantChunks,
+        memory: null, // Theme analysis doesn't need conversation memory
+        analysis,
+        analysisMode,
+        requestType: `theme consistency analysis for "${theme}"`
+      }) + `
         
         THEME TO ANALYZE: "${theme}"
-        
-        TEXT TO ANALYZE:
-        "${text}"
-        
-        ${relevantChunks.length > 0 ? `
-        RELEVANT THEMATIC CONTEXT FROM PROJECT:
-        ${relevantChunks.map((chunk, i) => `${i + 1}. ${chunk.pageContent.slice(0, 250)}...`).join('\n')}
-        ` : ''}
+        THEME EXISTS IN PROJECT: ${themeExistsInProject ? 'Yes' : 'No'}
+        THEME APPEARS IN CURRENT TEXT: ${text.toLowerCase().includes(theme.toLowerCase()) ? 'Yes' : 'No'}
         
         Please provide a detailed theme analysis with this structure:
         
@@ -628,86 +675,111 @@ Provide specific, implementable advice that will help the writer create more eng
   }
 
   // Advanced foreshadowing analysis with deep storytelling insights
-  // OPTIMIZED: Removed embedding-based RAG search to avoid Google API quota and improve speed
-  async checkForeshadowing(text: string, context: string, projectId?: string): Promise<string> {
+  // HYBRID MODE: Supports both fast (text-based) and deep (embedding-based) analysis
+  async checkForeshadowing(text: string, context: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<string> {
     if (!this.model) {
       return 'AI features are not available due to missing API key configuration.';
     }
     
     try {
-      console.log(`🔮 Analyzing foreshadowing for project: ${projectId} (fast text-based approach)`);
+      console.log(`🔮 Analyzing foreshadowing for project: ${projectId} (${analysisMode} mode)`);
       
-      // Direct project context access (similar to addProjectToRAG approach)
+      // HYBRID ANALYSIS MODE: Fast vs Deep
+      let relevantChunks: any[] = [];
+      let projectFullContent = '';
+      
+      // 1. Get project context and stats (always needed)
       const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
-      console.log(`📋 Project context retrieved directly:`, projectContext ? 'Found' : 'Not found');
-      
-      // Get project stats directly (no embedding searches needed)
       const projectStats = projectId ? await improvedRAGService.getProjectStats(projectId) : {
         characters: [] as string[], 
         themes: [] as string[], 
         plotElements: [] as string[], 
         totalChunks: 0
       };
-      console.log(`📊 Project stats retrieved: ${projectStats.characters.length} characters, ${projectStats.plotElements.length} plot elements`);
+      console.log(`📋 Project context retrieved:`, projectContext ? 'Found' : 'Not found');
+      console.log(`📊 Project stats: ${projectStats.characters.length} characters, ${projectStats.plotElements.length} plot elements`);
+      
+      // 2. Get actual project content for richer AI context
+      if (projectId) {
+        try {
+          const project = await prisma.project.findUnique({
+            where: { id: projectId },
+            select: { content: true, title: true, description: true }
+          });
+          
+          if (project?.content) {
+            projectFullContent = project.content;
+            console.log(`📜 Retrieved full project content for foreshadowing analysis: ${projectFullContent.length} characters`);
+          }
+        } catch (error) {
+          console.log(`⚠️ Could not retrieve full project content:`, error);
+        }
+      }
+      
+      // 3. Mode-specific analysis
+      if (analysisMode === 'deep') {
+        console.log(`🔍 DEEP MODE: Using embedding-based RAG search for detailed foreshadowing analysis...`);
+        try {
+          const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch('plot future events character development foreshadowing', {
+            projectId,
+            limit: 6, // More chunks for deep foreshadowing analysis
+            contentTypes: ['plot', 'narrative', 'character'],
+            includeContext: true
+          }) : null;
+          relevantChunks = ragResults?.results || [];
+          console.log(`🔍 Deep search found ${relevantChunks.length} relevant chunks for foreshadowing`);
+        } catch (ragError) {
+          console.log(`⚠️ Deep search failed, falling back to fast mode`);
+        }
+      } else {
+        console.log(`⚡ FAST MODE: Using direct project context for foreshadowing (no embedding search)`);
+      }
       
       const analysis = this.analyzeWriting(text);
-      console.log(`📝 Text analysis complete without embeddings`);
+      console.log(`📝 Text analysis complete for ${analysisMode} mode`);
       
-      // No RAG chunk search - use direct project context instead
+      // Use enhanced prompt builder with rich story content
       
-      // DETAILED FORESHADOWING ANALYSIS
-      const prompt = `
-        As a storytelling expert, analyze this text for foreshadowing opportunities and provide detailed, actionable insights.
-        
-        ${projectContext ? `
-        PROJECT CONTEXT:
-        - Project ID: ${projectContext.projectId}
-        - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
-        - Themes: ${projectContext.themes?.join(', ') || 'None identified'}
-        - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
-        - Plot Points: ${projectContext.plotPoints?.join(', ') || 'None identified'}
-        - Writing Style: ${projectContext.writingStyle || 'Not specified'}
-        ` : ''}
-        
-        PROJECT STATISTICS:
-        - Total Characters: ${projectStats.characters.length} (${projectStats.characters.slice(0, 5).join(', ')}${projectStats.characters.length > 5 ? '...' : ''})
-        - Themes: ${projectStats.themes.slice(0, 3).join(', ')}${projectStats.themes.length > 3 ? '...' : ''}
-        - Plot Elements: ${projectStats.plotElements.slice(0, 3).join(', ')}${projectStats.plotElements.length > 3 ? '...' : ''}
-        
-        CURRENT WRITING ANALYSIS:
-        - Word Count: ${analysis.wordCount}
-        - Tone: ${analysis.tone}
-        - Pacing: ${analysis.pacing}
-        - Detected Characters: ${analysis.characters.join(', ') || 'None detected'}
-        - Detected Themes: ${analysis.themes.join(', ') || 'None detected'}
-        - Plot Points: ${analysis.plotPoints.join(', ') || 'None detected'}
-        
-        TEXT TO ANALYZE:
-        "${text}"
-        
-        Please provide a comprehensive foreshadowing analysis with the following structure:
-        
-        ## 🔮 FORESHADOWING ANALYSIS
-        
-        **Current Foreshadowing Elements**:
-        - List any existing hints, symbols, or subtle elements that hint at future events
-        - Note their effectiveness and clarity
-        
-        **Missed Opportunities**:
-        - Identify 3-4 specific places where foreshadowing could be strengthened
-        - Explain what future events these could hint at
-        
-        **Concrete Suggestions**:
-        1. **Symbolic Elements**: Specific objects, imagery, or metaphors to introduce
-        2. **Dialogue Hints**: Subtle lines characters could say that gain meaning later
-        3. **Environmental Details**: Setting elements that could become significant
-        4. **Character Actions**: Small behaviors that could foreshadow larger character arcs
-        
-        **Implementation Examples**:
-        Provide 2-3 specific sentence examples showing how to implement these suggestions.
-        
-        Focus on subtlety and organic integration with the existing narrative.
-      `;
+      // Build enhanced foreshadowing prompt with rich context
+      const basePrompt = this.buildEnhancedPrompt({
+        context: text,
+        projectId: projectId || 'unknown',
+        projectContext,
+        projectStats,
+        projectFullContent,
+        relevantChunks,
+        memory: null, // Foreshadowing doesn't need conversation memory
+        analysis,
+        analysisMode,
+        requestType: 'foreshadowing analysis'
+      });
+      
+      const additionalInstructions = `
+      
+Please provide a comprehensive foreshadowing analysis with the following structure:
+      
+      ## 🔮 FORESHADOWING ANALYSIS
+      
+      **Current Foreshadowing Elements**:
+      - List any existing hints, symbols, or subtle elements that hint at future events
+      - Note their effectiveness and clarity
+      
+      **Missed Opportunities**:
+      - Identify 3-4 specific places where foreshadowing could be strengthened
+      - Explain what future events these could hint at
+      
+      **Concrete Suggestions**:
+      1. **Symbolic Elements**: Specific objects, imagery, or metaphors to introduce
+      2. **Dialogue Hints**: Subtle lines characters could say that gain meaning later
+      3. **Environmental Details**: Setting elements that could become significant
+      4. **Character Actions**: Small behaviors that could foreshadow larger character arcs
+      
+      **Implementation Examples**:
+      Provide 2-3 specific sentence examples showing how to implement these suggestions.
+      
+      Focus on subtlety and organic integration with the existing narrative.`;
+      
+      const prompt = basePrompt + additionalInstructions;
 
       const response = await trackAICall(
         () => this.callWithTimeout(this.model.invoke(prompt), 'Foreshadowing Analysis'),
@@ -721,92 +793,128 @@ Provide specific, implementable advice that will help the writer create more eng
   }
 
     // Enhanced character motivation and stakes evaluation
-    // OPTIMIZED: Removed embedding-based RAG search to avoid Google API quota and improve speed
-    async evaluateMotivationAndStakes(text: string, character: string, projectId?: string): Promise<string> {
+    // HYBRID MODE: Supports both fast (text-based) and deep (embedding-based) analysis
+    async evaluateMotivationAndStakes(text: string, character: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<string> {
       if (!this.model) {
         return 'AI features are not available due to missing API key configuration.';
       }
       
       try {
-        console.log(`🎭 Analyzing motivation for character: ${character} in project: ${projectId} (fast text-based approach)`);
+        console.log(`🎭 Analyzing motivation for character: ${character} in project: ${projectId} (${analysisMode} mode)`);
         
-        // Direct project context access (similar to addProjectToRAG approach)
+        // HYBRID ANALYSIS MODE: Fast vs Deep
+        let relevantChunks: any[] = [];
+        let projectFullContent = '';
+        
+        // 1. Get project context and stats (always needed)
         const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
-        console.log(`📋 Project context retrieved directly:`, projectContext ? 'Found' : 'Not found');
-        
-        // Get project stats directly (no embedding searches needed)
         const projectStats = projectId ? await improvedRAGService.getProjectStats(projectId) : {
           characters: [] as string[], 
           themes: [] as string[], 
           plotElements: [] as string[], 
           totalChunks: 0
         };
-        console.log(`📊 Project stats retrieved: ${projectStats.characters.length} characters`);
-        console.log(`📝 Text analysis for motivation without embeddings`);
+        console.log(`📋 Project context retrieved:`, projectContext ? 'Found' : 'Not found');
+        console.log(`📊 Project stats: ${projectStats.characters.length} characters`);
         
-        // No RAG chunk search - use direct project context instead
+        // 2. Get actual project content for richer AI context
+        if (projectId) {
+          try {
+            const project = await prisma.project.findUnique({
+              where: { id: projectId },
+              select: { content: true, title: true, description: true }
+            });
+            
+            if (project?.content) {
+              projectFullContent = project.content;
+              console.log(`📜 Retrieved full project content for character analysis: ${projectFullContent.length} characters`);
+            }
+          } catch (error) {
+            console.log(`⚠️ Could not retrieve full project content:`, error);
+          }
+        }
         
-        // DETAILED MOTIVATION ANALYSIS
-        const prompt = `
-          As a character development expert, analyze the motivation and stakes for "${character}" in this text.
-          
-          ${projectContext ? `
-          PROJECT CONTEXT:
-          - Project ID: ${projectContext.projectId}
-          - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
-          - Themes: ${projectContext.themes?.join(', ') || 'None identified'}
-          - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
-          - Plot Points: ${projectContext.plotPoints?.join(', ') || 'None identified'}
-          - Writing Style: ${projectContext.writingStyle || 'Not specified'}
-          ` : ''}
-          
-          CHARACTER TO ANALYZE: "${character}"
-          
-          PROJECT STATISTICS:
-          - All Characters in Project: ${projectStats.characters.join(', ') || 'None identified'}
-          - Main Themes: ${projectStats.themes.slice(0, 5).join(', ')}
-          - Plot Elements: ${projectStats.plotElements.slice(0, 5).join(', ')}
-          
-          TEXT TO ANALYZE:
-          "${text}"
-          
-          CHARACTER ANALYSIS FOR "${character}":
-          - Is this character known in the project context? ${projectStats.characters.includes(character) ? 'Yes' : 'No'}
-          - Character appears in current text: ${text.toLowerCase().includes(character.toLowerCase()) ? 'Yes' : 'No'}
-          
-          Please provide a comprehensive character analysis with this structure:
-          
-          ## 🎭 CHARACTER ANALYSIS: ${character.toUpperCase()}
-          
-          **Motivation Clarity Score**: [1-10] - How clear are ${character}'s motivations?
-          
-          **Core Motivations**:
-          - **Internal Drives**: What does ${character} want emotionally/psychologically?
-          - **External Goals**: What concrete objectives are they pursuing?
-          - **Hidden Desires**: What might they not admit to themselves?
-          
-          **Stakes Assessment**:
-          - **What They Stand to Gain**: Rewards for success
-          - **What They Stand to Lose**: Consequences of failure
-          - **Personal Cost**: What they must sacrifice to achieve their goals
-          
-          **Motivation Strength Analysis**:
-          - Areas where motivations are compelling and clear
-          - Places where motivations feel weak or unclear
-          - Contradictions or conflicts in their desires
-          
-          **Enhancement Recommendations**:
-          1. **Dialogue Opportunities**: Lines that could reveal deeper motivations
-          2. **Action Sequences**: Behaviors that would demonstrate their drives
-          3. **Internal Conflict**: Ways to show competing motivations
-          4. **Backstory Elements**: Past events that could justify current motivations
-          
-          **Character Arc Potential**:
-          Explain how their current motivations could evolve throughout the story.
-          
-          **Reader Investment**:
-          Why should readers care about ${character}'s journey and outcome?
-        `;
+        // 3. Mode-specific analysis
+        if (analysisMode === 'deep') {
+          console.log(`🔍 DEEP MODE: Using embedding-based RAG search for detailed character analysis...`);
+          try {
+            const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch(`${character} motivation goals development`, {
+              projectId,
+              limit: 4, // More chunks for deep character analysis
+              characters: [character],
+              contentTypes: ['character'],
+              includeContext: true
+            }) : null;
+            relevantChunks = ragResults?.results || [];
+            console.log(`🔍 Deep search found ${relevantChunks.length} relevant chunks for character "${character}"`);
+          } catch (ragError) {
+            console.log(`⚠️ Deep search failed, falling back to fast mode`);
+          }
+        } else {
+          console.log(`⚡ FAST MODE: Using direct project context for character analysis (no embedding search)`);
+        }
+        
+        console.log(`📝 Text analysis for motivation in ${analysisMode} mode`);
+        
+        // Character analysis
+        const characterExistsInProject = projectStats.characters.includes(character);
+        const characterAppearsInText = text.toLowerCase().includes(character.toLowerCase());
+        
+        // Build enhanced motivation analysis prompt with rich context
+        const analysis = this.analyzeWriting(text);
+        const basePrompt = this.buildEnhancedPrompt({
+          context: text,
+          projectId: projectId || 'unknown',
+          projectContext,
+          projectStats,
+          projectFullContent,
+          relevantChunks,
+          memory: null, // Motivation analysis doesn't need conversation memory
+          analysis,
+          analysisMode,
+          requestType: `character motivation and stakes analysis for "${character}"`
+        });
+        
+        const characterAnalysis = `
+        
+        CHARACTER TO ANALYZE: "${character}"
+        CHARACTER EXISTS IN PROJECT: ${characterExistsInProject ? 'Yes' : 'No'}
+        CHARACTER APPEARS IN CURRENT TEXT: ${characterAppearsInText ? 'Yes' : 'No'}
+        
+        Please provide a comprehensive character analysis with this structure:
+        
+        ## 🎭 CHARACTER ANALYSIS: ${character.toUpperCase()}
+        
+        **Motivation Clarity Score**: [1-10] - How clear are ${character}'s motivations?
+        
+        **Core Motivations**:
+        - **Internal Drives**: What does ${character} want emotionally/psychologically?
+        - **External Goals**: What concrete objectives are they pursuing?
+        - **Hidden Desires**: What might they not admit to themselves?
+        
+        **Stakes Assessment**:
+        - **What They Stand to Gain**: Rewards for success
+        - **What They Stand to Lose**: Consequences of failure
+        - **Personal Cost**: What they must sacrifice to achieve their goals
+        
+        **Motivation Strength Analysis**:
+        - Areas where motivations are compelling and clear
+        - Places where motivations feel weak or unclear
+        - Contradictions or conflicts in their desires
+        
+        **Enhancement Recommendations**:
+        1. **Dialogue Opportunities**: Lines that could reveal deeper motivations
+        2. **Action Sequences**: Behaviors that would demonstrate their drives
+        3. **Internal Conflict**: Ways to show competing motivations
+        4. **Backstory Elements**: Past events that could justify current motivations
+        
+        **Character Arc Potential**:
+        Explain how their current motivations could evolve throughout the story.
+        
+        **Reader Investment**:
+        Why should readers care about ${character}'s journey and outcome?`;
+        
+        const prompt = basePrompt + characterAnalysis;
 
         const response = await trackAICall(
           () => this.callWithTimeout(this.model.invoke(prompt), 'Motivation Analysis'),
@@ -1041,6 +1149,92 @@ Provide specific, implementable advice that will help the writer create more eng
       return response.content as string;
     }
 
+    // Build enhanced context-aware prompt with richer story content and hybrid mode
+    private buildEnhancedPrompt(params: {
+      context: string;
+      projectId: string;
+      projectContext: ProjectContext | null;
+      projectStats: any;
+      projectFullContent?: string;
+      relevantChunks: any[];
+      memory: ConversationMemory | null;
+      analysis: WritingAnalysis;
+      analysisMode: 'fast' | 'deep';
+      requestType: string;
+    }): string {
+      const { context, projectContext, projectStats, projectFullContent = '', relevantChunks, memory, analysis, analysisMode, requestType } = params;
+      
+      return `
+        You are an expert AI writing assistant with deep understanding of storytelling, character development, and narrative craft.
+        
+        ANALYSIS MODE: ${analysisMode.toUpperCase()}
+        REQUEST TYPE: ${requestType}
+        
+        PROJECT CONTEXT:
+        ${projectContext ? `
+        - Project ID: "${projectContext.projectId}"
+        - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
+        - Themes: ${projectContext.themes?.join(', ') || 'None identified'}
+        - Writing Style: ${projectContext.writingStyle || 'Not specified'}
+        - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
+        - Plot Points: ${projectContext.plotPoints?.join(', ') || 'None identified'}
+        ` : 'No specific project context available.'}
+        
+        PROJECT STATISTICS:
+        - Total Chunks: ${projectStats.totalChunks || 0}
+        - Characters: ${Array.isArray(projectStats.characters) ? projectStats.characters.join(', ') : 'None'}
+        - Themes: ${Array.isArray(projectStats.themes) ? projectStats.themes.join(', ') : 'None'}
+        - Content Types: ${Array.isArray(projectStats.contentTypes) ? projectStats.contentTypes.join(', ') : 'None'}
+        
+        ${projectFullContent ? `
+        FULL STORY CONTEXT (EXCERPT):
+        ${projectFullContent.slice(0, 1500)}
+        ${projectFullContent.length > 1500 ? '... [truncated]' : ''}
+        ` : ''}
+        
+        CURRENT WRITING ANALYSIS:
+        - Word Count: ${analysis.wordCount}
+        - Tone: ${analysis.tone}
+        - Pacing: ${analysis.pacing}
+        - Readability: ${analysis.readabilityScore.toFixed(1)}/100
+        - Detected Themes: ${analysis.themes.join(', ')}
+        - Characters Mentioned: ${analysis.characters.join(', ')}
+        - Plot Points: ${analysis.plotPoints.join(', ')}
+        
+        ${relevantChunks.length > 0 ? `
+        RELEVANT CONTEXT FROM PROJECT (${relevantChunks.length} chunks):
+        ${relevantChunks.map((chunk, i) => `
+        ${i + 1}. [${chunk.metadata?.contentType || 'unknown'}] ${chunk.pageContent.slice(0, 300)}...
+        `).join('\n')}
+        ` : projectContext ? `
+        RELEVANT CONTEXT FROM PROJECT:
+        Since this is a known project, provide suggestions that build upon the established elements above.
+        Consider how your suggestions can enhance the existing characters, themes, and settings.
+        ` : `
+        RELEVANT CONTEXT FROM PROJECT:
+        No specific project context available - provide general but helpful writing suggestions.
+        `}
+        
+        ${memory && memory.messages.length > 0 ? `
+        RECENT CONVERSATION:
+        ${memory.messages.slice(-3).map(m => `${m.role}: ${m.content.slice(0, 200)}...`).join('\n')}
+        ` : ''}
+        
+        CURRENT TEXT TO ANALYZE:
+        "${context}"
+        
+        Based on all this context, provide intelligent, specific, and actionable ${requestType} that:
+        1. Maintain consistency with the established project elements
+        2. Build upon the existing narrative and character development
+        3. Consider the current tone, pacing, and style
+        4. Address potential plot development opportunities
+        5. Suggest improvements that enhance the overall story
+        6. Are specific and immediately actionable
+        
+        Format your response with clear sections and specific examples. Be encouraging but constructive.
+      `;
+    }
+
     // Build comprehensive context-aware prompts
     private buildIntelligentPrompt(params: {
       context: string;
@@ -1224,4 +1418,4 @@ Provide specific, implementable advice that will help the writer create more eng
   const aiService = new AIService();
 
   export default aiService;
-  export { AIService, WritingAnalysis, ConversationMemory };
+  export { WritingAnalysis, ConversationMemory };

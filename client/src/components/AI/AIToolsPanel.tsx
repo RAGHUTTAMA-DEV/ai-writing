@@ -38,6 +38,7 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
 
   const [themeInput, setThemeInput] = useState('');
   const [characterInput, setCharacterInput] = useState('');
+  const [analysisMode, setAnalysisMode] = useState<'fast' | 'deep'>('fast');
 
   const handleGenerateSuggestions = async () => {
     if (!activeProject?.content || activeProject.content.length < 50) {
@@ -47,7 +48,8 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
     try {
       // Use actual project content for better suggestions
       const context = `Project: ${activeProject.title}\n\nContent: ${activeProject.content.slice(-500)}`; // Last 500 chars for context
-      await generateSuggestions(projectId, context);
+      console.log(`🎯 Generating suggestions in ${analysisMode} mode`);
+      await generateSuggestions(projectId, context, analysisMode);
     } catch (error) {
       console.error('Failed to generate suggestions:', error);
     }
@@ -63,7 +65,8 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
       return;
     }
     try {
-      await analyzeThemeConsistency(activeProject.content, themeInput, projectId);
+      console.log(`🎯 Analyzing theme consistency in ${analysisMode} mode`);
+      await analyzeThemeConsistency(activeProject.content, themeInput, projectId, analysisMode);
     } catch (error) {
       console.error('Failed to analyze theme:', error);
     }
@@ -75,7 +78,8 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
       return;
     }
     try {
-      await checkForeshadowing(activeProject.content, 'Check for foreshadowing opportunities', projectId);
+      console.log(`🔮 Checking foreshadowing in ${analysisMode} mode`);
+      await checkForeshadowing(activeProject.content, 'Check for foreshadowing opportunities', projectId, analysisMode);
     } catch (error) {
       console.error('Failed to check foreshadowing:', error);
     }
@@ -91,7 +95,8 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
       return;
     }
     try {
-      await evaluateMotivationAndStakes(activeProject.content, characterInput, projectId);
+      console.log(`🎭 Evaluating motivation and stakes in ${analysisMode} mode`);
+      await evaluateMotivationAndStakes(activeProject.content, characterInput, projectId, analysisMode);
     } catch (error) {
       console.error('Failed to evaluate motivation and stakes:', error);
     }
@@ -256,6 +261,64 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
       <AILoadingState operation="suggestions" isActive={aiLoading} />
       
       <div className="space-y-4 animate-fade-in p-4">
+      
+      {/* Analysis Mode Selector */}
+      <Card className="border-2 border-blue-200 bg-gradient-to-r from-blue-50 to-indigo-50 shadow-sm">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="flex items-center space-x-2 text-base">
+              <Icon name="settings" variant="primary" size="sm" />
+              <span>Analysis Mode</span>
+            </CardTitle>
+            <div className="flex items-center space-x-2">
+              <Button
+                onClick={() => setAnalysisMode('fast')}
+                variant={analysisMode === 'fast' ? 'default' : 'outline'}
+                size="sm"
+                className={`flex items-center space-x-1.5 px-3 transition-all duration-200 ${
+                  analysisMode === 'fast' 
+                    ? 'bg-green-500 text-white border-green-600 shadow-md' 
+                    : 'hover:border-green-400 hover:text-green-700'
+                }`}
+              >
+                <Icon name="zap" size="xs" />
+                <span>Fast</span>
+              </Button>
+              <Button
+                onClick={() => setAnalysisMode('deep')}
+                variant={analysisMode === 'deep' ? 'default' : 'outline'}
+                size="sm"
+                className={`flex items-center space-x-1.5 px-3 transition-all duration-200 ${
+                  analysisMode === 'deep' 
+                    ? 'bg-purple-500 text-white border-purple-600 shadow-md' 
+                    : 'hover:border-purple-400 hover:text-purple-700'
+                }`}
+              >
+                <Icon name="brain" size="xs" />
+                <span>Deep</span>
+              </Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="pt-0">
+          <div className="flex items-center justify-between text-sm">
+            <div className="flex items-center space-x-2">
+              {analysisMode === 'fast' ? (
+                <>
+                  <div className="w-2 h-2 bg-green-400 rounded-full animate-pulse"></div>
+                  <span className="text-green-700 font-medium">Fast Mode: Text-based analysis, quick results</span>
+                </>
+              ) : (
+                <>
+                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-pulse"></div>
+                  <span className="text-purple-700 font-medium">Deep Mode: Embedding-based analysis, comprehensive insights</span>
+                </>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+      
       {aiError && (
         <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start space-x-2 animate-slide-up">
           <Icon name="alert-circle" variant="danger" size="sm" className="mt-0.5" />
@@ -309,7 +372,11 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                   disabled={aiLoading}
                   variant="gradient"
                   size="default"
-                  className="flex items-center space-x-2 px-6 py-3 animate-pulse-on-hover relative overflow-hidden bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold shadow-lg hover:shadow-xl border-2 border-yellow-400 hover:border-yellow-300"
+                  className={`flex items-center space-x-2 px-6 py-3 animate-pulse-on-hover relative overflow-hidden text-white font-bold shadow-lg hover:shadow-xl border-2 transition-all duration-300 ${
+                    analysisMode === 'fast' 
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 border-green-400 hover:border-green-300'
+                      : 'bg-gradient-to-r from-purple-500 to-violet-500 hover:from-purple-600 hover:to-violet-600 border-purple-400 hover:border-purple-300'
+                  }`}
                 >
                   {aiLoading && (
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-[length:200%_100%] animate-gradient-x"></div>
@@ -321,7 +388,7 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                       <Icon name="sparkles" size="xs" className="text-white" />
                     )}
                     <span className="text-sm font-bold">
-                      {aiLoading ? 'Generating AI Suggestions...' : 'Get AI Suggestions'}
+                      {aiLoading ? `Generating AI Suggestions (${analysisMode})...` : `Get AI Suggestions (${analysisMode.toUpperCase()})`}
                     </span>
                   </div>
                 </Button>
@@ -390,9 +457,12 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                     onClick={handleThemeAnalysis}
                     disabled={aiLoading || !themeInput.trim()}
                     variant="success"
+                    className={`flex items-center space-x-2 transition-all duration-300 ${
+                      analysisMode === 'deep' ? 'bg-purple-500 hover:bg-purple-600 border-purple-600' : ''
+                    }`}
                   >
                     {aiLoading ? <LoadingIcon /> : <Icon name="target" />}
-                    <span>{aiLoading ? 'Analyzing...' : 'Analyze'}</span>
+                    <span>{aiLoading ? `Analyzing (${analysisMode})...` : `Analyze (${analysisMode.toUpperCase()})`}</span>
                   </Button>
                 </div>
               </div>
@@ -426,14 +496,18 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                 <Button 
                   onClick={handleForeshadowingCheck}
                   disabled={aiLoading}
-                  className="flex items-center space-x-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold shadow-lg hover:shadow-xl border-2 border-purple-300 hover:border-purple-200 px-6 py-2"
+                  className={`flex items-center space-x-2 text-white font-bold shadow-lg hover:shadow-xl border-2 px-6 py-2 transition-all duration-300 ${
+                    analysisMode === 'fast' 
+                      ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 border-green-300 hover:border-green-200'
+                      : 'bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 border-purple-300 hover:border-purple-200'
+                  }`}
                 >
                   {aiLoading ? (
                     <LoadingIcon className="text-white" />
                   ) : (
                     <Icon name="eye" className="text-white" />
                   )}
-                  <span>Analyze</span>
+                  <span>{aiLoading ? `Analyzing (${analysisMode})...` : `Analyze (${analysisMode.toUpperCase()})`}</span>
                 </Button>
               </div>
             </CardHeader>
@@ -486,9 +560,12 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                     onClick={handleMotivationStakes}
                     disabled={aiLoading || !characterInput.trim()}
                     variant="warning"
+                    className={`flex items-center space-x-2 transition-all duration-300 ${
+                      analysisMode === 'deep' ? 'bg-purple-500 hover:bg-purple-600 border-purple-600' : ''
+                    }`}
                   >
                     {aiLoading ? <LoadingIcon /> : <Icon name="users" />}
-                    <span>{aiLoading ? 'Analyzing...' : 'Analyze'}</span>
+                    <span>{aiLoading ? `Analyzing (${analysisMode})...` : `Analyze (${analysisMode.toUpperCase()})`}</span>
                   </Button>
                 </div>
               </div>

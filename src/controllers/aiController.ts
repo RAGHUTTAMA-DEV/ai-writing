@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import aiService, { AIService } from '../services/aiService';
+import { AIService } from '../services/aiService';
 import { ImprovedRAGService, EnhancedDocument } from '../services/improvedRAGService';
 import { PrismaClient } from '@prisma/client';
 import { aiResponseCache } from '../services/cacheService';
@@ -7,10 +7,21 @@ import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 const improvedRAGService = new ImprovedRAGService();
+const aiService = new AIService();
 
 interface AISuggestionRequest {
   projectId: string;
   context: string;
+  analysisMode?: 'fast' | 'deep';
+}
+
+interface AIAnalysisRequest {
+  text: string;
+  theme?: string;
+  character?: string;
+  context?: string;
+  projectId?: string;
+  analysisMode?: 'fast' | 'deep';
 }
 
 class AIController {
@@ -88,7 +99,7 @@ class AIController {
   // Generate writing suggestions based on context
   async generateSuggestions(req: Request<{}, {}, AISuggestionRequest>, res: Response): Promise<void> {
     try {
-      const { projectId, context } = req.body;
+      const { projectId, context, analysisMode = 'fast' } = req.body;
 
       // Validate input
       if (!projectId || !context) {
@@ -98,15 +109,37 @@ class AIController {
         return;
       }
 
-      // Generate AI suggestions
+      const userId = (req as any).user?.id;
+      console.log(`🎯 Generating suggestions in ${analysisMode} mode for user ${userId}`);
+
+      // Content-aware cache key that includes analysis mode
+      const cacheKey = await this.createContentAwareCacheKey('suggestions', context, `${analysisMode}:${userId || 'anon'}`, projectId);
+      const cached = aiResponseCache.get(cacheKey);
+      if (cached) {
+        console.log(`🎯 Returning cached suggestions (${analysisMode} mode)`);
+        res.json({
+          message: `Suggestions generated successfully (cached, ${analysisMode} mode)`,
+          suggestions: cached,
+          analysisMode
+        });
+        return;
+      }
+
+      // Generate AI suggestions with specified mode
       const suggestions = await aiService.generateSuggestions(
         context,
-        projectId
+        projectId,
+        userId,
+        analysisMode
       );
 
+      // Cache the result
+      aiResponseCache.set(cacheKey, suggestions, 600); // 10 minutes
+
       res.json({
-        message: 'Suggestions generated successfully',
-        suggestions
+        message: `Suggestions generated successfully (${analysisMode} mode)`,
+        suggestions,
+        analysisMode
       });
     } catch (error) {
       console.error('Error generating suggestions:', error);
@@ -116,10 +149,10 @@ class AIController {
     }
   }
 
-  // Analyze theme consistency with circuit breaker
-  async analyzeThemeConsistency(req: Request<{}, {}, { text: string; theme: string; projectId?: string }>, res: Response): Promise<void> {
+  // Analyze theme consistency with analysis mode support
+  async analyzeThemeConsistency(req: Request<{}, {}, AIAnalysisRequest>, res: Response): Promise<void> {
     try {
-      const { text, theme, projectId } = req.body;
+      const { text, theme, projectId, analysisMode = 'fast' } = req.body;
 
       if (!text || !theme) {
         res.status(400).json({ 
@@ -128,25 +161,29 @@ class AIController {
         return;
       }
 
-      // Content-aware cache key that changes when project content changes
-      const cacheKey = await this.createContentAwareCacheKey('theme', text, theme, projectId);
+      console.log(`🎯 Analyzing theme consistency in ${analysisMode} mode`);
+
+      // Content-aware cache key that includes analysis mode
+      const cacheKey = await this.createContentAwareCacheKey('theme', text, `${theme}:${analysisMode}`, projectId);
       const cached = aiResponseCache.get(cacheKey);
       if (cached) {
-        console.log('🎯 Returning cached theme analysis');
+        console.log(`🎯 Returning cached theme analysis (${analysisMode} mode)`);
         res.json({
-          message: 'Theme analysis completed (cached)',
-          analysis: cached
+          message: `Theme analysis completed (cached, ${analysisMode} mode)`,
+          analysis: cached,
+          analysisMode
         });
         return;
       }
 
-      // Let AI service handle timeouts
-      const analysis = await aiService.analyzeThemeConsistency(text, theme, projectId);
+      // Generate theme analysis with specified mode
+      const analysis = await aiService.analyzeThemeConsistency(text, theme, projectId, analysisMode);
       aiResponseCache.set(cacheKey, analysis, 3600);
       
       res.json({
-        message: 'Theme consistency analysis completed',
-        analysis
+        message: `Theme consistency analysis completed (${analysisMode} mode)`,
+        analysis,
+        analysisMode
       });
     } catch (error) {
       console.error('Error analyzing theme consistency:', error);
@@ -156,10 +193,10 @@ class AIController {
     }
   }
 
-  // Check for foreshadowing opportunities with aggressive caching and circuit breaker
-  async checkForeshadowing(req: Request<{}, {}, { text: string; context?: string; projectId?: string }>, res: Response): Promise<void> {
+  // Check for foreshadowing opportunities with analysis mode support
+  async checkForeshadowing(req: Request<{}, {}, AIAnalysisRequest>, res: Response): Promise<void> {
     try {
-      const { text, context, projectId } = req.body;
+      const { text, context, projectId, analysisMode = 'fast' } = req.body;
 
       if (!text) {
         res.status(400).json({ 
@@ -168,27 +205,31 @@ class AIController {
         return;
       }
 
-      // Content-aware cache key that changes when project content changes
-      const cacheKey = await this.createContentAwareCacheKey('foreshadowing', text, '', projectId);
+      console.log(`🔮 Checking foreshadowing in ${analysisMode} mode`);
+
+      // Content-aware cache key that includes analysis mode
+      const cacheKey = await this.createContentAwareCacheKey('foreshadowing', text, `${analysisMode}`, projectId);
       const cached = aiResponseCache.get(cacheKey);
       if (cached) {
-        console.log('🔮 Returning cached foreshadowing analysis');
+        console.log(`🔮 Returning cached foreshadowing analysis (${analysisMode} mode)`);
         res.json({
-          message: 'Foreshadowing analysis completed (cached)',
-          foreshadowing: cached
+          message: `Foreshadowing analysis completed (cached, ${analysisMode} mode)`,
+          foreshadowing: cached,
+          analysisMode
         });
         return;
       }
 
-      // Let AI service handle its own timeouts - no circuit breaker
-      const foreshadowing = await aiService.checkForeshadowing(text, context || '', projectId);
+      // Generate foreshadowing analysis with specified mode
+      const foreshadowing = await aiService.checkForeshadowing(text, context || '', projectId, analysisMode);
       
       // Cache for 1 hour
       aiResponseCache.set(cacheKey, foreshadowing, 3600);
       
       res.json({
-        message: 'Foreshadowing analysis completed',
-        foreshadowing
+        message: `Foreshadowing analysis completed (${analysisMode} mode)`,
+        foreshadowing,
+        analysisMode
       });
     } catch (error) {
       console.error('Error checking foreshadowing:', error);
@@ -198,37 +239,41 @@ class AIController {
     }
   }
 
-  // Evaluate character motivation and stakes with circuit breaker
-  async evaluateMotivationAndStakes(req: Request<{}, {}, { text: string; character: string; projectId?: string }>, res: Response): Promise<void> {
+  // Evaluate character motivation and stakes with analysis mode support
+  async evaluateMotivationAndStakes(req: Request<{}, {}, AIAnalysisRequest>, res: Response): Promise<void> {
     try {
-      const { text, character, projectId } = req.body;
+      const { text, character, projectId, analysisMode = 'fast' } = req.body;
 
       if (!text || !character) {
         res.status(400).json({ 
-          message: 'Text and character are required' 
+          message: 'Text and character name are required' 
         });
         return;
       }
 
-      // Content-aware cache key that changes when project content changes
-      const cacheKey = await this.createContentAwareCacheKey('motivation', text, character, projectId);
+      console.log(`🎭 Evaluating motivation and stakes in ${analysisMode} mode`);
+
+      // Content-aware cache key that includes analysis mode
+      const cacheKey = await this.createContentAwareCacheKey('motivation', text, `${character}:${analysisMode}`, projectId);
       const cached = aiResponseCache.get(cacheKey);
       if (cached) {
-        console.log('🎭 Returning cached motivation analysis');
+        console.log(`🎭 Returning cached motivation analysis (${analysisMode} mode)`);
         res.json({
-          message: 'Motivation evaluation completed (cached)',
-          evaluation: cached
+          message: `Motivation evaluation completed (cached, ${analysisMode} mode)`,
+          evaluation: cached,
+          analysisMode
         });
         return;
       }
 
-      // Let AI service handle timeouts
-      const evaluation = await aiService.evaluateMotivationAndStakes(text, character, projectId);
+      // Generate motivation analysis with specified mode
+      const evaluation = await aiService.evaluateMotivationAndStakes(text, character, projectId, analysisMode);
       aiResponseCache.set(cacheKey, evaluation, 3600);
       
       res.json({
-        message: 'Motivation and stakes evaluation completed',
-        evaluation
+        message: `Motivation and stakes evaluation completed (${analysisMode} mode)`,
+        evaluation,
+        analysisMode
       });
     } catch (error) {
       console.error('Error evaluating motivation and stakes:', error);

@@ -209,7 +209,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
             variant={autoSaveEnabled ? "default" : "ghost"}
             size="sm"
             onClick={() => setAutoSaveEnabled(!autoSaveEnabled)}
-            className={`h-8 px-3 text-xs transition-all ${autoSaveEnabled ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'hover:bg-gray-100'}`}
+            className={`editor-tooltip h-8 px-3 text-xs transition-all ${autoSaveEnabled ? 'bg-blue-100 text-blue-700 hover:bg-blue-200' : 'hover:bg-gray-100'}`}
             title={`Auto-save ${autoSaveEnabled ? 'enabled' : 'disabled'} (every 3s)`}
           >
             <Clock className="w-3 h-3 mr-1" />
@@ -221,7 +221,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
             variant={focusMode ? "default" : "ghost"}
             size="sm"
             onClick={() => setFocusMode(!focusMode)}
-            className="h-8 px-3 text-xs"
+            className="editor-tooltip h-8 px-3 text-xs"
             title="Toggle focus mode"
           >
             {focusMode ? <Minimize2 className="w-3 h-3" /> : <Maximize2 className="w-3 h-3" />}
@@ -232,7 +232,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
             variant={showPreview ? "default" : "ghost"}
             size="sm"
             onClick={() => setShowPreview(!showPreview)}
-            className={`h-8 px-3 text-xs ${showPreview ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'hover:bg-gray-100'}`}
+            className={`editor-tooltip h-8 px-3 text-xs ${showPreview ? 'bg-indigo-100 text-indigo-700 hover:bg-indigo-200' : 'hover:bg-gray-100'}`}
             title="Toggle preview (Ctrl+P)"
           >
             {showPreview ? <EyeOff className="w-3 h-3" /> : <Eye className="w-3 h-3" />}
@@ -244,7 +244,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
             disabled={aiLoading || !content.trim()}
             variant="ghost"
             size="sm"
-            className="h-8 px-3 text-xs text-purple-600 hover:bg-purple-50 disabled:opacity-50"
+            className="editor-tooltip h-8 px-3 text-xs text-purple-600 hover:bg-purple-50 disabled:opacity-50"
             title="Get AI writing suggestions"
           >
             {aiLoading ? (
@@ -260,7 +260,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
             onClick={handleSave}
             disabled={!isDirty || saveStatus === 'saving'}
             size="sm"
-            className="h-8 px-4 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 font-medium"
+            className="editor-tooltip h-8 px-4 text-xs bg-blue-600 hover:bg-blue-700 disabled:opacity-50 font-medium"
             title="Save document (Ctrl+S)"
           >
             <Save className="w-3 h-3 mr-1" />
@@ -384,11 +384,20 @@ Let your imagination flow. Every great story starts with a single word."
 
       {/* Keyboard Shortcuts Help (appears on focus) */}
       {focusMode && (
-        <div className="absolute bottom-6 right-6 bg-black/80 text-white px-3 py-2 rounded-lg text-xs opacity-80">
-          <div className="space-y-1">
-            <div><kbd className="bg-white/20 px-1 rounded">Ctrl+S</kbd> Save</div>
-            <div><kbd className="bg-white/20 px-1 rounded">Ctrl+P</kbd> Preview</div>
-            <div><kbd className="bg-white/20 px-1 rounded">F11</kbd> Fullscreen</div>
+        <div className="absolute bottom-6 right-6 bg-gray-900/95 backdrop-blur-sm text-white px-4 py-3 rounded-lg text-xs shadow-lg border border-gray-700/50">
+          <div className="space-y-1.5">
+            <div className="flex items-center gap-2">
+              <kbd className="bg-gray-700/80 text-gray-200 px-1.5 py-0.5 rounded text-xs font-medium border border-gray-600/50">Ctrl+S</kbd> 
+              <span className="text-gray-200">Save</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="bg-gray-700/80 text-gray-200 px-1.5 py-0.5 rounded text-xs font-medium border border-gray-600/50">Ctrl+P</kbd> 
+              <span className="text-gray-200">Preview</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="bg-gray-700/80 text-gray-200 px-1.5 py-0.5 rounded text-xs font-medium border border-gray-600/50">F11</kbd> 
+              <span className="text-gray-200">Fullscreen</span>
+            </div>
           </div>
         </div>
       )}
