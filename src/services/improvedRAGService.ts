@@ -90,10 +90,119 @@ export class ImprovedRAGService {
   
   // Embedding cache to avoid repeat API calls
   private embeddingCache = new Map<string, number[]>();
+  
+  // Common search terms to preload embeddings for
+  private commonSearchTerms = [
+    'character development', 'plot', 'theme', 'setting', 'dialogue', 
+    'conflict', 'resolution', 'motivation', 'backstory', 'relationship',
+    'tension', 'pacing', 'scene', 'chapter', 'narrative', 'story arc'
+  ];
 
   constructor() {
     this.persistencePath = path.join(process.cwd(), 'data', 'rag_service_data.json');
     this.initializeServices();
+  }
+
+  // Check if we can make an embedding call
+  private canMakeEmbeddingCall(): boolean {
+    const now = Date.now();
+    
+    // Reset rate limiter if time window passed
+    if (now > this.embeddingRateLimiter.resetTime) {
+      this.embeddingRateLimiter.calls = 0;
+      this.embeddingRateLimiter.resetTime = now + 60000;
+      this.embeddingRateLimiter.isRateLimited = false;
+    }
+    
+    // Check if we're in a rate limit cooldown
+    if (this.embeddingRateLimiter.isRateLimited && now < this.embeddingRateLimiter.rateLimitUntil) {
+      return false;
+    }
+    
+    // Check if we've hit our conservative limit
+    if (this.embeddingRateLimiter.calls >= this.embeddingRateLimiter.maxCallsPerMinute) {
+      this.embeddingRateLimiter.isRateLimited = true;
+      this.embeddingRateLimiter.rateLimitUntil = now + 120000; // Wait 2 minutes before trying again
+      console.warn(`🛑 Embedding rate limit reached (${this.embeddingRateLimiter.calls} calls). Waiting 2 minutes before retrying.`);
+      return false;
+    }
+    
+    return true;
+  }
+  
+  // Get cached embedding or generate new one
+  private async getCachedEmbedding(text: string): Promise<number[] | null> {
+    const textHash = crypto.createHash('md5').update(text).digest('hex');
+    
+    // Check cache first
+    if (this.embeddingCache.has(textHash)) {
+      console.log('💾 Using cached embedding');
+      return this.embeddingCache.get(textHash)!;
+    }
+    
+    // Check if we can make an API call
+    if (!this.canMakeEmbeddingCall() || !this.embeddings) {
+      return null;
+    }
+    
+    try {
+      console.log('🔄 Generating new embedding (cached for future use)');
+      this.embeddingRateLimiter.calls++;
+      const embedding = await this.embeddings.embedQuery(text);
+      
+      // Cache the result
+      this.embeddingCache.set(textHash, embedding);
+      
+      // Limit cache size to prevent memory issues
+      if (this.embeddingCache.size > 1000) {
+        const firstKey = this.embeddingCache.keys().next().value;
+        if (firstKey) {
+          this.embeddingCache.delete(firstKey);
+        }
+      }
+      
+      return embedding;
+    } catch (error: any) {
+      // Handle rate limit errors more gracefully
+      if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('rate limit')) {
+        console.warn('🛑 Hit Google API rate limit, entering cooldown mode');
+        this.embeddingRateLimiter.isRateLimited = true;
+        this.embeddingRateLimiter.rateLimitUntil = Date.now() + 300000; // Wait 5 minutes for actual rate limits
+      }
+      throw error;
+    }
+  }
+  
+  // Preload embeddings for common search terms when rate limits allow
+  async preloadCommonEmbeddings(): Promise<void> {
+    if (!this.embeddings || !this.canMakeEmbeddingCall()) {
+      return;
+    }
+    
+    console.log('🔄 Preloading common embeddings...');
+    let preloaded = 0;
+    
+    for (const term of this.commonSearchTerms) {
+      if (!this.canMakeEmbeddingCall()) {
+        console.log(`🛑 Rate limit reached during preloading. Preloaded ${preloaded} embeddings.`);
+        break;
+      }
+      
+      try {
+        const embedding = await this.getCachedEmbedding(term);
+        if (embedding) {
+          preloaded++;
+        }
+        
+        // Small delay between requests to be respectful
+        await new Promise(resolve => setTimeout(resolve, 100));
+      } catch (error) {
+        console.warn(`Failed to preload embedding for "${term}":`, error);
+        break; // Stop on any error
+      }
+    }
+    
+    console.log(`✅ Preloaded ${preloaded} common embeddings`);
   }
 
   private async initializeServices(): Promise<void> {
@@ -121,6 +230,9 @@ export class ImprovedRAGService {
       
       // Load any persisted data
       await this.loadPersistedData();
+      
+      // Preload common embeddings if rate limits allow
+      setTimeout(() => this.preloadCommonEmbeddings(), 2000); // Wait 2 seconds after init
       
     } catch (error) {
       console.error('❌ Failed to initialize ImprovedRAGService:', error);
@@ -165,17 +277,22 @@ export class ImprovedRAGService {
     };
     
     try {
-      // Try vector-based search first
-      if (this.vectorStore && this.embeddings) {
+      // Check if we can use vector search (rate limits and availability)
+      if (this.vectorStore && this.embeddings && this.canMakeEmbeddingCall()) {
+        console.log('🔍 Attempting vector-based search');
         searchResults = await this.performVectorSearch(query, options);
       } else {
-        console.log('📝 Vector store unavailable, using fallback text search');
+        if (!this.canMakeEmbeddingCall()) {
+          console.log('🛑 Embedding rate limited, using fallback text search immediately');
+        } else {
+          console.log('📝 Vector store unavailable, using fallback text search');
+        }
         searchResults = await this.performFallbackSearch(query, options);
       }
     } catch (error: any) {
       // If we hit rate limits or other embedding errors, fallback to text search
       if (error.message?.includes('429') || error.message?.includes('quota') || error.message?.includes('rate limit')) {
-        console.warn('⚠️ Embeddings rate limited, using fallback text search');
+        console.warn('⚠️ Embeddings rate limited during search, using fallback text search');
         searchResults = await this.performFallbackSearch(query, options);
       } else {
         console.error("Error in intelligent search:", error);
@@ -183,9 +300,10 @@ export class ImprovedRAGService {
       }
     }
     
-    // Cache the results for 5 minutes
+    // Cache the results for 15 minutes to reduce embedding calls
     if (searchResults.results.length > 0) {
-      searchCache.set(cacheKey, searchResults, 300);
+      searchCache.set(cacheKey, searchResults, 900); // 15 minutes
+      console.log('💾 Cached search results for 15 minutes');
     }
     
     return searchResults;
@@ -211,6 +329,13 @@ export class ImprovedRAGService {
     
     // Analyze the query to improve search
     const queryAnalysis = await this.analyzeSearchQuery(query);
+    
+    // Try to get cached embedding for the query first
+    const queryEmbedding = await this.getCachedEmbedding(query);
+    if (!queryEmbedding) {
+      console.warn('🛑 Cannot generate query embedding, falling back to text search');
+      return await this.performFallbackSearch(query, options);
+    }
     
     // Get more results initially for better filtering
     const initialLimit = Math.max(limit * 6, 30);
@@ -737,18 +862,27 @@ Return only a number between 0.0 and 1.0.`;
       // Add to documents array
       this.documents.push(enhancedDoc);
 
-      // Add to vector store if available
-      if (this.vectorStore && this.embeddings) {
+      // Add to vector store if available and rate limits allow
+      if (this.vectorStore && this.embeddings && this.canMakeEmbeddingCall()) {
         try {
-          await this.vectorStore.addDocuments([enhancedDoc]);
-          console.log('✅ Document added to vector store');
+          // Try to get cached embedding first
+          const cachedEmbedding = await this.getCachedEmbedding(content);
+          if (cachedEmbedding) {
+            // We have cached embedding, add to vector store
+            await this.vectorStore.addDocuments([enhancedDoc]);
+            console.log('✅ Document added to vector store using cached embedding');
+          } else {
+            console.warn('🛑 Cannot generate embedding due to rate limits, document added to text search only');
+          }
         } catch (embedError: any) {
           if (embedError.message?.includes('429') || embedError.message?.includes('quota')) {
-            console.warn('⚠️ Vector store rate limited, document added to text search only');
+            console.warn('⚠️ Vector store rate limited during document add, document added to text search only');
           } else {
             throw embedError;
           }
         }
+      } else if (!this.canMakeEmbeddingCall()) {
+        console.log('🛑 Embedding rate limited, document added to text search only');
       }
 
       // Update project context
