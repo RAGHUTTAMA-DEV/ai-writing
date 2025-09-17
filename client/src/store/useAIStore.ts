@@ -24,6 +24,9 @@ interface AIState {
   evaluateMotivationAndStakes: (text: string, character: string, projectId?: string) => Promise<void>;
   searchRAG: (query: string, projectId?: string, limit?: number) => Promise<void>;
   clearSuggestions: () => void;
+  clearThemeAnalysis: () => void;
+  clearForeshadowing: () => void;
+  clearMotivationStakes: () => void;
   clearError: () => void;
   resetLoadingState: () => void;
 }
@@ -151,14 +154,19 @@ export const useAIStore = create<AIState>()(
       },
 
       clearSuggestions: () => {
-        set({ 
-          suggestions: [],
-          themeAnalysis: [],
-          foreshadowing: [],
-          motivationStakes: [],
-          ragResults: [],
-          ragSummary: null
-        });
+        set({ suggestions: [] });
+      },
+
+      clearThemeAnalysis: () => {
+        set({ themeAnalysis: [] });
+      },
+
+      clearForeshadowing: () => {
+        set({ foreshadowing: [] });
+      },
+
+      clearMotivationStakes: () => {
+        set({ motivationStakes: [] });
       },
 
       clearError: () => {

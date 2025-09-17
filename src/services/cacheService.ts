@@ -112,6 +112,11 @@ export class CacheService {
     this.misses = 0;
     console.log('🧹 Cache cleared');
   }
+  
+  // Alias for clear() to match NodeCache interface
+  flushAll(): void {
+    this.clear();
+  }
 
   // Get cache statistics
   getStats(): CacheStats {

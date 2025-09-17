@@ -78,6 +78,18 @@ export class ImprovedRAGService {
   private semanticCache = new Map<string, any>();
   private projectContexts = new Map<string, ProjectContext>();
   private persistencePath: string;
+  
+  // Rate limiting for embeddings
+  private embeddingRateLimiter = {
+    calls: 0,
+    resetTime: Date.now() + 60000, // Reset every minute
+    maxCallsPerMinute: 10, // Very conservative limit
+    isRateLimited: false,
+    rateLimitUntil: 0
+  };
+  
+  // Embedding cache to avoid repeat API calls
+  private embeddingCache = new Map<string, number[]>();
 
   constructor() {
     this.persistencePath = path.join(process.cwd(), 'data', 'rag_service_data.json');

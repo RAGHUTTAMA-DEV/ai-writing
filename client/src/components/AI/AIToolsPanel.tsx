@@ -27,6 +27,9 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
     checkForeshadowing,
     evaluateMotivationAndStakes,
     clearSuggestions,
+    clearThemeAnalysis,
+    clearForeshadowing,
+    clearMotivationStakes,
     clearError,
     resetLoadingState
   } = useAIStore();
@@ -305,8 +308,8 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                   onClick={handleGenerateSuggestions}
                   disabled={aiLoading}
                   variant="gradient"
-                  size="sm"
-                  className="flex items-center space-x-1.5 h-8 px-3 animate-pulse-on-hover relative overflow-hidden"
+                  size="default"
+                  className="flex items-center space-x-2 px-6 py-3 animate-pulse-on-hover relative overflow-hidden bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white font-bold shadow-lg hover:shadow-xl border-2 border-yellow-400 hover:border-yellow-300"
                 >
                   {aiLoading && (
                     <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-[length:200%_100%] animate-gradient-x"></div>
@@ -317,7 +320,7 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                     ) : (
                       <Icon name="sparkles" size="xs" className="text-white" />
                     )}
-                    <span className="text-xs font-medium">
+                    <span className="text-sm font-bold">
                       {aiLoading ? 'Generating AI Suggestions...' : 'Get AI Suggestions'}
                     </span>
                   </div>
@@ -396,9 +399,14 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
 
               {themeAnalysis.length > 0 && (
                 <div className="mt-6 animate-slide-up">
-                  <div className="flex items-center space-x-2 mb-4">
-                    <Icon name="check-circle" variant="success" />
-                    <h3 className="font-semibold text-foreground">Analysis Results</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      <Icon name="check-circle" variant="success" />
+                      <h3 className="font-semibold text-foreground">Analysis Results</h3>
+                    </div>
+                    <Button variant="outline" onClick={clearThemeAnalysis} size="sm">
+                      Clear
+                    </Button>
                   </div>
                   {renderAnalysisResult(themeAnalysis, 'theme')}
                 </div>
@@ -418,7 +426,7 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                 <Button 
                   onClick={handleForeshadowingCheck}
                   disabled={aiLoading}
-                  className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 text-white"
+                  className="flex items-center space-x-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white font-bold shadow-lg hover:shadow-xl border-2 border-purple-300 hover:border-purple-200 px-6 py-2"
                 >
                   {aiLoading ? (
                     <LoadingIcon className="text-white" />
@@ -432,9 +440,14 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
             <CardContent>
               {foreshadowing.length > 0 ? (
                 <div className="space-y-4 animate-slide-up">
-                  <div className="flex items-center space-x-2 mb-4">
-                    <Icon name="info" variant="primary" />
-                    <h3 className="font-semibold text-foreground">Foreshadowing Opportunities</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      <Icon name="info" variant="primary" />
+                      <h3 className="font-semibold text-foreground">Foreshadowing Opportunities</h3>
+                    </div>
+                    <Button variant="outline" onClick={clearForeshadowing} size="sm">
+                      Clear
+                    </Button>
                   </div>
                   {renderAnalysisResult(foreshadowing, 'foreshadowing')}
                 </div>
@@ -482,9 +495,14 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
 
               {motivationStakes.length > 0 && (
                 <div className="mt-6 animate-slide-up">
-                  <div className="flex items-center space-x-2 mb-4">
-                    <Icon name="check-circle" variant="success" />
-                    <h3 className="font-semibold text-foreground">Character Analysis</h3>
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center space-x-2">
+                      <Icon name="check-circle" variant="success" />
+                      <h3 className="font-semibold text-foreground">Character Analysis</h3>
+                    </div>
+                    <Button variant="outline" onClick={clearMotivationStakes} size="sm">
+                      Clear
+                    </Button>
                   </div>
                   {renderAnalysisResult(motivationStakes, 'character')}
                 </div>

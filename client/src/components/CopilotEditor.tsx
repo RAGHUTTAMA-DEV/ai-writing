@@ -483,7 +483,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       <div className="absolute top-6 left-6 z-20">
         <button
           onClick={openAIAssistant}
-          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-4 py-2.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center space-x-2 group"
+          className="bg-gradient-to-r from-orange-500 to-red-500 hover:from-orange-600 hover:to-red-600 text-white px-4 py-2.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center space-x-2 group border-2 border-white"
           title="Open AI Assistant (Ctrl+K)"
         >
           <Icon name="sparkles" size="sm" className="text-white group-hover:animate-pulse" />

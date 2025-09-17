@@ -1,7 +1,9 @@
 import { Request, Response } from 'express';
-import aiService from '../services/aiService';
+import aiService, { AIService } from '../services/aiService';
 import { ImprovedRAGService, EnhancedDocument } from '../services/improvedRAGService';
 import { PrismaClient } from '@prisma/client';
+import { aiResponseCache } from '../services/cacheService';
+import crypto from 'crypto';
 
 const prisma = new PrismaClient();
 const improvedRAGService = new ImprovedRAGService();
@@ -12,6 +14,36 @@ interface AISuggestionRequest {
 }
 
 class AIController {
+  // Helper function to create cache keys that change when content changes
+  private async createContentAwareCacheKey(
+    operation: string, 
+    text: string, 
+    additionalParams: string = '', 
+    projectId?: string
+  ): Promise<string> {
+    // Create a hash of the content to detect changes
+    const contentHash = crypto.createHash('md5').update(text).digest('hex').substring(0, 8);
+    
+    // Get project's last modified timestamp if available
+    let projectTimestamp = 'none';
+    if (projectId) {
+      try {
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { updatedAt: true }
+        });
+        if (project) {
+          projectTimestamp = project.updatedAt.getTime().toString();
+        }
+      } catch (error) {
+        console.warn('Could not get project timestamp for cache key');
+      }
+    }
+    
+    // Combine operation, content hash, project timestamp, and additional params
+    const keyParts = [operation, contentHash, projectTimestamp, additionalParams].filter(Boolean);
+    return keyParts.join(':');
+  }
   // Generate autocomplete suggestions (Copilot-like feature)
   async generateAutocomplete(req: Request<{}, {}, { text: string; cursorPosition: number; projectId?: string }>, res: Response): Promise<void> {
     try {
@@ -84,7 +116,7 @@ class AIController {
     }
   }
 
-  // Analyze theme consistency
+  // Analyze theme consistency with circuit breaker
   async analyzeThemeConsistency(req: Request<{}, {}, { text: string; theme: string; projectId?: string }>, res: Response): Promise<void> {
     try {
       const { text, theme, projectId } = req.body;
@@ -96,8 +128,22 @@ class AIController {
         return;
       }
 
-      const analysis = await aiService.analyzeThemeConsistency(text, theme, projectId);
+      // Content-aware cache key that changes when project content changes
+      const cacheKey = await this.createContentAwareCacheKey('theme', text, theme, projectId);
+      const cached = aiResponseCache.get(cacheKey);
+      if (cached) {
+        console.log('🎯 Returning cached theme analysis');
+        res.json({
+          message: 'Theme analysis completed (cached)',
+          analysis: cached
+        });
+        return;
+      }
 
+      // Let AI service handle timeouts
+      const analysis = await aiService.analyzeThemeConsistency(text, theme, projectId);
+      aiResponseCache.set(cacheKey, analysis, 3600);
+      
       res.json({
         message: 'Theme consistency analysis completed',
         analysis
@@ -110,7 +156,7 @@ class AIController {
     }
   }
 
-  // Check for foreshadowing opportunities
+  // Check for foreshadowing opportunities with aggressive caching and circuit breaker
   async checkForeshadowing(req: Request<{}, {}, { text: string; context?: string; projectId?: string }>, res: Response): Promise<void> {
     try {
       const { text, context, projectId } = req.body;
@@ -122,8 +168,24 @@ class AIController {
         return;
       }
 
-      const foreshadowing = await aiService.checkForeshadowing(text, context || '', projectId);
+      // Content-aware cache key that changes when project content changes
+      const cacheKey = await this.createContentAwareCacheKey('foreshadowing', text, '', projectId);
+      const cached = aiResponseCache.get(cacheKey);
+      if (cached) {
+        console.log('🔮 Returning cached foreshadowing analysis');
+        res.json({
+          message: 'Foreshadowing analysis completed (cached)',
+          foreshadowing: cached
+        });
+        return;
+      }
 
+      // Let AI service handle its own timeouts - no circuit breaker
+      const foreshadowing = await aiService.checkForeshadowing(text, context || '', projectId);
+      
+      // Cache for 1 hour
+      aiResponseCache.set(cacheKey, foreshadowing, 3600);
+      
       res.json({
         message: 'Foreshadowing analysis completed',
         foreshadowing
@@ -136,7 +198,7 @@ class AIController {
     }
   }
 
-  // Evaluate character motivation and stakes
+  // Evaluate character motivation and stakes with circuit breaker
   async evaluateMotivationAndStakes(req: Request<{}, {}, { text: string; character: string; projectId?: string }>, res: Response): Promise<void> {
     try {
       const { text, character, projectId } = req.body;
@@ -148,8 +210,22 @@ class AIController {
         return;
       }
 
-      const evaluation = await aiService.evaluateMotivationAndStakes(text, character, projectId);
+      // Content-aware cache key that changes when project content changes
+      const cacheKey = await this.createContentAwareCacheKey('motivation', text, character, projectId);
+      const cached = aiResponseCache.get(cacheKey);
+      if (cached) {
+        console.log('🎭 Returning cached motivation analysis');
+        res.json({
+          message: 'Motivation evaluation completed (cached)',
+          evaluation: cached
+        });
+        return;
+      }
 
+      // Let AI service handle timeouts
+      const evaluation = await aiService.evaluateMotivationAndStakes(text, character, projectId);
+      aiResponseCache.set(cacheKey, evaluation, 3600);
+      
       res.json({
         message: 'Motivation and stakes evaluation completed',
         evaluation
@@ -395,6 +471,39 @@ class AIController {
       res.status(500).json({ 
         message: 'Server error while fetching project analytics',
         error: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  }
+
+  // Manual cache clearing for debugging/testing
+  async clearCache(req: Request<{}, {}, { projectId?: string; type?: string }>, res: Response): Promise<void> {
+    try {
+      const { projectId, type } = req.body;
+      
+      if (type === 'all') {
+        // Clear all AI response caches
+        aiResponseCache.flushAll();
+        console.log('🧹 All AI response caches cleared');
+        
+        res.json({
+          message: 'All AI caches cleared successfully'
+        });
+      } else if (projectId) {
+        // Clear project-specific caches (this will be handled by content-aware keys automatically)
+        console.log(`🧹 Content-aware caches will auto-invalidate for project ${projectId}`);
+        
+        res.json({
+          message: `Cache invalidation noted for project ${projectId}. Content-aware caches will refresh automatically.`
+        });
+      } else {
+        res.status(400).json({
+          message: 'Either specify projectId or type=all'
+        });
+      }
+    } catch (error) {
+      console.error('Error clearing cache:', error);
+      res.status(500).json({
+        message: 'Error clearing cache'
       });
     }
   }

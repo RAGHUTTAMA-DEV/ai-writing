@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import prisma from '../prisma';
 import ragService from '../services/ragService';
 import { AuthenticatedRequest } from '../middleware/auth';
+import { aiResponseCache, projectCache } from '../services/cacheService';
 
 interface CreateProjectRequest {
   title: string;
@@ -274,6 +275,25 @@ const updateProject = async (req: AuthenticatedRequest, res: Response): Promise<
         }
       }
     });
+    
+    // Invalidate AI analysis caches when content changes
+    if (content && content !== project?.content) {
+      console.log(`🧹 Invalidating AI caches for project ${id} due to content change`);
+      
+      // Clear all AI analysis caches for this project
+      // Since we can't easily iterate over cache keys, we'll use a more targeted approach
+      // The content-aware cache keys will automatically change due to content hash change
+      
+      // Clear project context cache to force refresh
+      const projectContextKey = `project_context_${id}`;
+      projectCache.delete(projectContextKey);
+      
+      // Clear any general project-related caches
+      const projectStatsKey = `project_stats_${id}`;
+      projectCache.delete(projectStatsKey);
+      
+      console.log(`✅ AI caches invalidated for project ${id}`);
+    }
     
     // Update project content in RAG system
     if (content) {

@@ -114,48 +114,123 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
   };
 
   const formatMessage = (content: string) => {
-    // Split content into paragraphs and format
-    return content.split('\n').map((paragraph, index) => {
-      if (!paragraph.trim()) return null;
+    const lines = content.split('\n').filter(line => line.trim() !== '');
+    const elements: React.ReactNode[] = [];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmedLine = line.trim();
       
-      // Check for headers (lines starting with **)
-      if (paragraph.startsWith('**') && paragraph.endsWith('**')) {
-        return (
-          <h4 key={index} className="font-semibold text-gray-800 mt-3 mb-2">
-            {paragraph.replace(/\*\*/g, '')}
-          </h4>
-        );
-      }
-      
-      // Check for numbered lists
-      if (paragraph.match(/^\d+\./)) {
-        return (
-          <div key={index} className="ml-2 mb-2 flex">
-            <span className="font-medium text-blue-600 mr-2">
-              {paragraph.match(/^\d+\./)![0]}
-            </span>
-            <span>{paragraph.replace(/^\d+\.\s*/, '')}</span>
+      // Skip empty lines
+      if (!trimmedLine) continue;
+
+      // Main section headers with emojis (## 📊 TITLE or just ## TITLE)
+      if (trimmedLine.match(/^##\s+/)) {
+        elements.push(
+          <div key={i} className="mb-4 mt-6 first:mt-0">
+            <h2 className="text-lg font-bold border-b-2 border-blue-500 pb-2 mb-3 text-blue-900">
+              {trimmedLine.replace(/^##\s+/, '')}
+            </h2>
           </div>
         );
+        continue;
       }
-      
-      // Check for bullet points
-      if (paragraph.startsWith('- ') || paragraph.startsWith('• ')) {
-        return (
-          <div key={index} className="ml-4 mb-2 flex">
-            <span className="text-blue-500 mr-2">•</span>
-            <span>{paragraph.replace(/^[-•]\s*/, '')}</span>
+
+      // Sub-section headers (**TITLE**: or **TITLE**)
+      if (trimmedLine.match(/^\*\*[^*]+\*\*:?\s*$/) || trimmedLine.match(/^\*\*[A-Z][^*]*\*\*$/)) {
+        elements.push(
+          <h3 key={i} className="text-base font-semibold text-gray-800 mt-4 mb-2 text-purple-700">
+            {trimmedLine.replace(/\*\*/g, '').replace(/:$/, '')}
+          </h3>
+        );
+        continue;
+      }
+
+      // Score lines (Score: [1-10])
+      if (trimmedLine.match(/^\*\*Score:\s*\[\d+-\d+\]\*\*/)) {
+        elements.push(
+          <div key={i} className="bg-blue-50 border-l-4 border-blue-400 p-3 my-3 rounded">
+            <div className="flex items-center">
+              <div className="text-base font-bold text-blue-700">
+                {trimmedLine.replace(/\*\*/g, '')}
+              </div>
+            </div>
           </div>
         );
+        continue;
       }
-      
-      // Regular paragraph
-      return (
-        <p key={index} className="mb-2 leading-relaxed">
-          {paragraph}
+
+      // Bullet points (- item)
+      if (trimmedLine.match(/^-\s+/)) {
+        const bulletText = trimmedLine.replace(/^-\s+/, '');
+        elements.push(
+          <div key={i} className="flex items-start mb-2 ml-3">
+            <div className="w-2 h-2 bg-blue-400 rounded-full mt-2 mr-3 flex-shrink-0"></div>
+            <div className="text-gray-700 leading-relaxed">
+              {renderInlineFormatting(bulletText)}
+            </div>
+          </div>
+        );
+        continue;
+      }
+
+      // Numbered lists (1. item)
+      if (trimmedLine.match(/^\d+\.\s+/)) {
+        const numberMatch = trimmedLine.match(/^(\d+\.)\s+(.*)/);
+        if (numberMatch) {
+          elements.push(
+            <div key={i} className="flex items-start mb-2">
+              <span className="font-semibold text-blue-600 mr-3 mt-0.5">
+                {numberMatch[1]}
+              </span>
+              <div className="text-gray-700 leading-relaxed flex-1">
+                {renderInlineFormatting(numberMatch[2])}
+              </div>
+            </div>
+          );
+        }
+        continue;
+      }
+
+      // Handle special analysis patterns
+      if (trimmedLine.includes('**') && !trimmedLine.match(/^\*\*[^*]+\*\*:?\s*$/)) {
+        // Lines with mixed bold content
+        elements.push(
+          <div key={i} className="text-gray-700 leading-relaxed mb-2 bg-gray-50 p-2 rounded">
+            {renderInlineFormatting(trimmedLine)}
+          </div>
+        );
+        continue;
+      }
+
+      // Regular paragraphs
+      elements.push(
+        <p key={i} className="text-gray-700 leading-relaxed mb-2">
+          {renderInlineFormatting(trimmedLine)}
         </p>
       );
-    }).filter(Boolean);
+    }
+
+    return <div className="space-y-1">{elements}</div>;
+  };
+
+  const renderInlineFormatting = (text: string) => {
+    // Handle bold text **text**
+    const parts = text.split(/(\*\*[^*]+\*\*)/g);
+    return (
+      <>
+        {parts.map((part, index) => {
+          if (part.match(/^\*\*[^*]+\*\*$/)) {
+            return (
+              <strong key={index} className="font-semibold text-gray-900">
+                {part.replace(/\*\*/g, '')}
+              </strong>
+            );
+          }
+          return <span key={index}>{part}</span>;
+        })}
+      </>
+    );
   };
 
   const quickPrompts = [

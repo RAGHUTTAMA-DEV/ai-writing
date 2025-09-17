@@ -35,12 +35,13 @@
     plotPoints: string[];
   }
 
-  class AIService {
+class AIService {
     private model: ChatGoogleGenerativeAI;
   private conversationMemory: Map<string, ConversationMemory> = new Map();
   private writingPatterns: Map<string, any> = new Map();
   private readonly MAX_CONVERSATION_MEMORY_SIZE = 100;
   private readonly MAX_WRITING_PATTERNS_SIZE = 50;
+  private readonly AI_TIMEOUT_MS = 60000; // 60 second timeout - reasonable for detailed analysis
 
     constructor() {
       const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
@@ -53,12 +54,22 @@
       
       this.model = new ChatGoogleGenerativeAI({
         model: "gemini-2.0-flash",
-        maxOutputTokens: 1024, // Reduced from 2048 for speed
+        maxOutputTokens: 2048, // Restored for detailed analysis
         apiKey: apiKey,
-        temperature: 0.7,
-        timeout: 30000, // 30 second timeout
-        maxRetries: 1, // Reduce retries for speed
+        temperature: 0.7, // Restored for creative responses
+        maxRetries: 1, // Allow one retry for reliability
       });
+    }
+
+    // Timeout wrapper for AI calls
+    private async callWithTimeout<T>(promise: Promise<T>, operation: string): Promise<T> {
+      const timeoutPromise = new Promise<never>((_, reject) => {
+        setTimeout(() => {
+          reject(new Error(`AI operation '${operation}' timed out after ${this.AI_TIMEOUT_MS}ms`));
+        }, this.AI_TIMEOUT_MS);
+      });
+      
+      return Promise.race([promise, timeoutPromise]);
     }
 
     // Generate autocomplete suggestions (Copilot-like feature) with caching
@@ -141,7 +152,7 @@ Provide ONLY the next few words (maximum 5 words). Do not repeat the text. Do no
 Continuation:`;
 
       const response = await trackAICall(
-        () => this.model!.invoke(prompt),
+        () => this.callWithTimeout(this.model!.invoke(prompt), 'Autocomplete Generation'),
         'Autocomplete Generation'
       );
       let suggestion = (response.content as string).trim();
@@ -269,7 +280,7 @@ Continuation:`;
 
         console.log(`🤖 Invoking AI model for suggestions...`);
         const response = await trackAICall(
-          () => this.model!.invoke(prompt),
+          () => this.callWithTimeout(this.model!.invoke(prompt), 'Suggestions Generation'),
           'Suggestions Generation'
         );
         const suggestions = response.content as string;
@@ -417,23 +428,70 @@ Continuation:`;
     }): string {
       const { context, projectContext, relevantChunks, analysis } = params;
       
-      // Build a more concise prompt for better performance
-      return `You are an expert AI writing assistant. Provide helpful writing suggestions for this text.
+    // Comprehensive prompt for detailed writing suggestions
+    return `You are an expert writing coach and storytelling advisor. Analyze this text and provide detailed, actionable suggestions to elevate the writing.
 
-${projectContext ? `PROJECT: "${projectContext.projectId}" - Style: ${projectContext.writingStyle || 'standard'}, Themes: ${projectContext.themes?.slice(0, 2).join(', ') || 'none'}\n` : ''}
-${relevantChunks.length > 0 ? `REFERENCE: ${relevantChunks[0].pageContent.slice(0, 200)}...\n` : ''}
-WRITING: Tone: ${analysis.tone}, ${analysis.wordCount} words, ${analysis.readabilityScore.toFixed(0)}/100 readability
+## PROJECT CONTEXT
+${projectContext ? `
+**Project Style**: ${projectContext.writingStyle || 'Not specified'}
+**Known Themes**: ${projectContext.themes?.join(', ') || 'None identified'}
+**Characters**: ${projectContext.characters?.join(', ') || 'None identified'}
+**Settings**: ${projectContext.settings?.join(', ') || 'None specified'}
+` : 'No project context available.'}
 
-TEXT:
-"${context.slice(0, 1000)}${context.length > 1000 ? '...' : ''}"
+## CURRENT WRITING ANALYSIS
+**Word Count**: ${analysis.wordCount} words
+**Tone**: ${analysis.tone}
+**Pacing**: ${analysis.pacing}
+**Readability Score**: ${analysis.readabilityScore.toFixed(0)}/100
+**Detected Themes**: ${analysis.themes.join(', ') || 'None detected'}
+**Characters Mentioned**: ${analysis.characters.join(', ') || 'None detected'}
 
-Provide 3-4 specific, actionable suggestions to improve this writing. Focus on:
-1. Flow and readability
-2. Character development
-3. Plot advancement
-4. Thematic depth
+${relevantChunks.length > 0 ? `## RELEVANT CONTEXT FROM PROJECT
+${relevantChunks.map((chunk, i) => `${i + 1}. ${chunk.pageContent.slice(0, 250)}...`).join('\n')}
+` : ''}
+## TEXT TO ANALYZE
+"${context}"
 
-Be concise but helpful.`;
+## WRITING IMPROVEMENT SUGGESTIONS
+
+Provide a comprehensive analysis with the following structure:
+
+### 🎯 **STRENGTHS**
+What works well in this passage? Highlight specific elements that are effective.
+
+### 🛠️ **AREAS FOR IMPROVEMENT**
+
+**1. Story Structure & Flow**
+- How can the narrative flow be enhanced?
+- Are there pacing issues to address?
+- Suggestions for scene transitions or paragraph structure
+
+**2. Character Development**
+- How can characters be made more compelling?
+- Opportunities for deeper characterization
+- Dialogue improvements (if applicable)
+
+**3. Descriptive Writing & Atmosphere**
+- Ways to strengthen scene setting and atmosphere
+- Sensory detail suggestions
+- Show vs. tell improvements
+
+**4. Plot & Tension**
+- How to increase narrative tension or stakes
+- Plot development opportunities
+- Conflict enhancement
+
+### ✨ **SPECIFIC ACTIONABLE RECOMMENDATIONS**
+1. **Immediate Fix**: One quick improvement that would have the biggest impact
+2. **Sentence-Level Edit**: Suggest a specific sentence revision with before/after
+3. **Expansion Opportunity**: Where to add 1-2 sentences for maximum effect
+4. **Stylistic Enhancement**: One technique to elevate the writing style
+
+### 🎨 **THEMATIC DEVELOPMENT**
+${projectContext && projectContext.themes ? `How can the themes of ${projectContext.themes.slice(0, 2).join(' and ')} be woven more effectively into this passage?` : 'What themes emerge from this text and how can they be strengthened?'}
+
+Provide specific, implementable advice that will help the writer create more engaging and polished prose.`;
     }
   
   // Original detailed analysis (keep for compatibility)
@@ -479,104 +537,72 @@ Be concise but helpful.`;
     }
     
     try {
-      const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
-      const ragResults = projectId ? await improvedRAGService.intelligentSearch(`${theme} thematic elements character development`, {
+      // OPTIMIZED RAG for speed
+      const projectContext = projectId ? await this.getCachedProjectContext(projectId) : null;
+      const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch(`${theme} thematic elements`, {
         projectId,
-        limit: 5,
+        limit: 1, // Reduced from 5 to 1
         themes: [theme],
-        includeContext: true
+        includeContext: false
       }) : null;
       const relevantChunks = ragResults?.results || [];
       const analysis = this.analyzeWriting(text);
       
-      const prompt = `You are a literary scholar and professional editor specializing in thematic analysis and narrative coherence. Conduct a comprehensive theme consistency analysis.
+      // DETAILED THEME ANALYSIS
+      const prompt = `
+        As a literary analysis expert, provide a comprehensive theme consistency analysis.
+        
+        ${projectContext ? `
+        PROJECT CONTEXT:
+        - Project ID: ${projectContext.projectId}
+        - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
+        - Existing Themes: ${projectContext.themes?.join(', ') || 'None identified'}
+        - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
+        ` : ''}
+        
+        THEME TO ANALYZE: "${theme}"
+        
+        TEXT TO ANALYZE:
+        "${text}"
+        
+        ${relevantChunks.length > 0 ? `
+        RELEVANT THEMATIC CONTEXT FROM PROJECT:
+        ${relevantChunks.map((chunk, i) => `${i + 1}. ${chunk.pageContent.slice(0, 250)}...`).join('\n')}
+        ` : ''}
+        
+        Please provide a detailed theme analysis with this structure:
+        
+        ## 🎯 THEME CONSISTENCY ANALYSIS: "${theme.toUpperCase()}"
+        
+        **Theme Presence Score**: [Rate 1-10 how well the theme appears]
+        
+        **Current Expression**:
+        - How the theme currently manifests in the text
+        - Specific examples of where it appears
+        - Strength of thematic elements
+        
+        **Consistency Issues**:
+        - Areas where the theme could be stronger
+        - Inconsistencies or missed opportunities
+        - Character actions/dialogue that could better reflect the theme
+        
+        **Enhancement Strategies**:
+        1. **Character Development**: How characters can better embody this theme
+        2. **Plot Integration**: Ways to weave the theme into plot events
+        3. **Symbolic Elements**: Objects, settings, or imagery that reinforce the theme
+        4. **Dialogue Opportunities**: Conversations that could explore the theme
+        
+        **Specific Recommendations**:
+        Provide 3-4 concrete, actionable suggestions with examples.
+        
+        **Thematic Resonance**:
+        Explain how this theme connects to universal human experiences.
+      `;
 
-**TARGET THEME**: "${theme}"
-
-${projectContext ? `
-**PROJECT UNIVERSE**:
-- Project ID: "${projectContext.projectId}"
-- Character Roster: ${projectContext.characters?.join(', ') || 'Characters developing'}
-- Established Thematic Framework: ${projectContext.themes?.join(', ') || 'Themes emerging'}
-- Narrative Style: ${projectContext.writingStyle || 'Style evolving'}
-- Settings: ${projectContext.settings?.join(', ') || 'Settings developing'}
-` : ''}
-
-**CURRENT TEXT ANALYSIS**:
-- Length: ${analysis.wordCount} words
-- Emotional Register: ${analysis.tone}
-- Detected Themes: ${analysis.themes.join(', ') || 'None detected'}
-- Characters Present: ${analysis.characters.join(', ') || 'None identified'}
-- Readability Level: ${analysis.readabilityScore.toFixed(1)}/100
-
-${relevantChunks.length > 0 ? `
-**THEMATIC CONTEXT FROM PROJECT**:
-${relevantChunks.map((chunk, i) => `
-[Reference ${i + 1}] ${chunk.metadata.contentType?.toUpperCase() || 'CONTENT'}:
-"${chunk.pageContent.slice(0, 250)}${chunk.pageContent.length > 250 ? '...' : ''}"
-Themes: ${chunk.metadata.themes?.join(', ') || 'none'}
-Emotional Tone: ${chunk.metadata.emotions?.join(', ') || 'none'}
-`).join('')}
-` : ''}
-
-**TEXT FOR THEMATIC ANALYSIS**:
-"""${text}"""
-
-Provide a sophisticated thematic analysis:
-
-## 📊 THEME CONSISTENCY EVALUATION
-**Score: [1-10]** with detailed justification
-- How explicitly vs. subtly is the theme presented?
-- Does the theme emerge naturally from character actions and plot?
-- Is the thematic treatment sophisticated and nuanced?
-
-## 🎭 THEMATIC EXPRESSION ANALYSIS
-**Direct Manifestations**:
-- Explicit mentions or discussions of the theme
-- Character statements that directly address the theme
-
-**Subtle Integration**:
-- Actions that demonstrate the theme without stating it
-- Symbolic elements that reinforce the theme
-- Subtext and implications that support thematic depth
-
-**Character-Theme Alignment**:
-- How character motivations reflect the theme
-- Whether character arcs support thematic development
-- Consistency between character actions and thematic messages
-
-## 💎 ENHANCEMENT OPPORTUNITIES
-**Strengthen Existing Elements**:
-- Specific sentences or scenes that could be deepened
-- Ways to make thematic elements more sophisticated
-- Opportunities to show rather than tell
-
-**New Integration Possibilities**:
-- Character moments that could be enhanced for thematic resonance
-- Dialogue opportunities for thematic subtext
-- Environmental or symbolic details that could reinforce the theme
-
-## 🏗️ NARRATIVE COHERENCE
-**Project-Wide Consistency**:
-- How this section fits with established thematic patterns
-- Whether the theme treatment matches your story's overall sophistication level
-- Continuity with character development and world-building
-
-**Reader Experience**:
-- Is the theme accessible without being heavy-handed?
-- Will readers discover new thematic layers on re-reading?
-- Does the theme enhance rather than overshadow the story?
-
-## 🎯 SPECIFIC ACTIONABLE RECOMMENDATIONS
-Provide 3-4 concrete suggestions with examples:
-- Exact phrases or scenes to modify
-- New details to weave in naturally
-- Ways to deepen existing thematic moments
-- Maintain your established voice and style
-
-Focus on sophisticated thematic integration that respects reader intelligence while ensuring thematic coherence throughout your narrative.`;
-
-      const response = await this.model.invoke(prompt);
+      const response = await trackAICall(
+        () => this.callWithTimeout(this.model.invoke(prompt), 'Theme Analysis'),
+        'Theme Analysis'
+      );
       return response.content as string;
     } catch (error) {
       console.error('Error analyzing theme consistency:', error);
@@ -591,85 +617,65 @@ Focus on sophisticated thematic integration that respects reader intelligence wh
     }
     
     try {
-      const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
-      const ragResults = projectId ? await improvedRAGService.intelligentSearch('plot future events character development', {
+      // OPTIMIZED RAG for speed - limit operations but keep functionality
+      const projectContext = projectId ? await this.getCachedProjectContext(projectId) : null;
+      const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch('plot future events character development', {
         projectId,
-        limit: 6,
+        limit: 2, // Reduced from 6 to 2
         contentTypes: ['plot', 'narrative', 'character'],
-        includeContext: true
+        includeContext: false // Skip context for speed
       }) : null;
       const relevantChunks = ragResults?.results || [];
       const analysis = this.analyzeWriting(text);
       
-      const prompt = `You are a master storytelling analyst and fiction editor with expertise in narrative craft, foreshadowing, and literary device implementation. Analyze this writing sample for foreshadowing opportunities.
+      // DETAILED FORESHADOWING ANALYSIS
+      const prompt = `
+        As a storytelling expert, analyze this text for foreshadowing opportunities and provide detailed, actionable insights.
+        
+        ${projectContext ? `
+        PROJECT CONTEXT:
+        - Project ID: ${projectContext.projectId}
+        - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
+        - Themes: ${projectContext.themes?.join(', ') || 'None identified'}
+        - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
+        ` : ''}
+        
+        TEXT TO ANALYZE:
+        "${text}"
+        
+        ${relevantChunks.length > 0 ? `
+        RELEVANT PROJECT CONTEXT:
+        ${relevantChunks.map((chunk, i) => `${i + 1}. ${chunk.pageContent.slice(0, 300)}...`).join('\n')}
+        ` : ''}
+        
+        Please provide a comprehensive foreshadowing analysis with the following structure:
+        
+        ## 🔮 FORESHADOWING ANALYSIS
+        
+        **Current Foreshadowing Elements**:
+        - List any existing hints, symbols, or subtle elements that hint at future events
+        - Note their effectiveness and clarity
+        
+        **Missed Opportunities**:
+        - Identify 3-4 specific places where foreshadowing could be strengthened
+        - Explain what future events these could hint at
+        
+        **Concrete Suggestions**:
+        1. **Symbolic Elements**: Specific objects, imagery, or metaphors to introduce
+        2. **Dialogue Hints**: Subtle lines characters could say that gain meaning later
+        3. **Environmental Details**: Setting elements that could become significant
+        4. **Character Actions**: Small behaviors that could foreshadow larger character arcs
+        
+        **Implementation Examples**:
+        Provide 2-3 specific sentence examples showing how to implement these suggestions.
+        
+        Focus on subtlety and organic integration with the existing narrative.
+      `;
 
-${projectContext ? `
-PROJECT UNIVERSE:
-- Project ID: "${projectContext.projectId}"
-- Established Characters: ${projectContext.characters?.join(', ') || 'Characters being developed'}
-- Core Themes: ${projectContext.themes?.join(', ') || 'Themes emerging'}
-- Known Plot Points: ${projectContext.plotPoints?.join(', ') || 'Plot developing organically'}
-- Writing Style: ${projectContext.writingStyle || 'Style being established'}
-- Settings: ${projectContext.settings?.join(', ') || 'Settings developing'}
-` : ''}
-
-CURRENT WRITING ANALYSIS:
-- Detected Themes: ${analysis.themes.join(', ') || 'None detected'}
-- Emotional Tone: ${analysis.tone}
-- Narrative Pacing: ${analysis.pacing}
-- Characters Present: ${analysis.characters.join(', ') || 'None identified'}
-- Plot Elements: ${analysis.plotPoints.join(', ') || 'None detected'}
-
-${relevantChunks.length > 0 ? `
-RELATED STORY CONTENT:
-${relevantChunks.map((chunk, i) => `
-[Context ${i + 1}] ${chunk.metadata.contentType?.toUpperCase() || 'CONTENT'}:
-"${chunk.pageContent.slice(0, 300)}${chunk.pageContent.length > 300 ? '...' : ''}"
-Themes: ${chunk.metadata.themes?.join(', ') || 'none'}
-Characters: ${chunk.metadata.characters?.join(', ') || 'none'}
-`).join('')}
-` : ''}
-
-TEXT TO ANALYZE FOR FORESHADOWING:
-"""${text}"""
-
-BROADER NARRATIVE CONTEXT:
-"""${context}"""
-
-Provide a comprehensive foreshadowing analysis covering:
-
-## 🔍 EXISTING FORESHADOWING ANALYSIS
-- Identify current subtle hints, symbols, or setup elements
-- Rate effectiveness (1-10) and explain reasoning
-- Note which future events these might be pointing toward
-
-## 💎 ENHANCEMENT OPPORTUNITIES
-- Specific elements that could be strengthened for better foreshadowing
-- Concrete ways to make existing hints more subtle yet powerful
-- Balance between subtlety and clarity for your target audience
-
-## 🌟 NEW FORESHADOWING POSSIBILITIES
-- **Character Actions**: Small behaviors that could hint at future character arcs
-- **Dialogue Subtext**: What characters say vs. what they mean - opportunities for layered meaning
-- **Environmental Details**: Setting elements that could mirror or predict future events
-- **Symbolic Objects**: Items that could carry deeper narrative significance
-- **Emotional Undercurrents**: Subtle emotional setups for future payoffs
-
-## 🎯 SPECIFIC IMPLEMENTATION SUGGESTIONS
-Provide 3-5 concrete, actionable suggestions with examples:
-- Exact sentences or phrases that could be modified
-- New details that could be naturally woven in
-- Character moments that could be enhanced
-- Maintain your established tone and style
-
-## 🏗️ NARRATIVE ARCHITECTURE
-- How this section fits into the larger story structure
-- Opportunities to plant seeds for major plot reveals
-- Ways to create satisfying "aha" moments for readers on re-reading
-
-Focus on sophisticated, literary foreshadowing that enhances rather than telegraphs future events. Consider your genre conventions and reader expectations.`;
-
-      const response = await this.model.invoke(prompt);
+      const response = await trackAICall(
+        () => this.callWithTimeout(this.model.invoke(prompt), 'Foreshadowing Analysis'),
+        'Foreshadowing Analysis'
+      );
       return response.content as string;
     } catch (error) {
       console.error('Error checking foreshadowing:', error);
@@ -684,17 +690,18 @@ Focus on sophisticated, literary foreshadowing that enhances rather than telegra
       }
       
       try {
-        const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
-        const ragResults = projectId ? await improvedRAGService.intelligentSearch(`${character} motivation goals`, {
+        // OPTIMIZED RAG for speed
+        const projectContext = projectId ? await this.getCachedProjectContext(projectId) : null;
+        const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch(`${character} motivation goals`, {
           projectId,
-          limit: 4,
+          limit: 1, // Reduced from 4 to 1
           characters: [character],
-          contentTypes: ['character', 'narrative', 'dialogue'],
-          includeContext: true
+          contentTypes: ['character'],
+          includeContext: false
         }) : null;
         const characterChunks = ragResults?.results || [];
-        const analysis = this.analyzeWriting(text);
         
+        // DETAILED MOTIVATION ANALYSIS
         const prompt = `
           As a character development expert, analyze the motivation and stakes for "${character}" in this text.
           
@@ -706,10 +713,7 @@ Focus on sophisticated, literary foreshadowing that enhances rather than telegra
           - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
           ` : ''}
           
-          WRITING ANALYSIS:
-          - Characters Mentioned: ${analysis.characters.join(', ')}
-          - Tone: ${analysis.tone}
-          - Themes Present: ${analysis.themes.join(', ')}
+          CHARACTER TO ANALYZE: "${character}"
           
           TEXT TO ANALYZE:
           "${text}"
@@ -719,19 +723,44 @@ Focus on sophisticated, literary foreshadowing that enhances rather than telegra
           ${characterChunks.map((chunk, i) => `${i + 1}. ${chunk.pageContent.slice(0, 200)}...`).join('\n')}
           ` : ''}
           
-          Please evaluate:
-          1. **Motivation Clarity** (1-10): How clear are ${character}'s motivations?
-          2. **Internal vs External**: What drives them internally vs. external pressures?
-          3. **Stakes Assessment**: What does ${character} stand to gain or lose?
-          4. **Emotional Investment**: Why should readers care about ${character}'s outcome?
-          5. **Character Arc**: How do current motivations serve their overall journey?
-          6. **Conflict Alignment**: Do the stakes create meaningful conflict?
-          7. **Improvement Strategies**: Specific ways to strengthen motivation/stakes
+          Please provide a comprehensive character analysis with this structure:
           
-          Provide detailed analysis with specific examples and actionable suggestions.
+          ## 🎭 CHARACTER ANALYSIS: ${character.toUpperCase()}
+          
+          **Motivation Clarity Score**: [1-10] - How clear are ${character}'s motivations?
+          
+          **Core Motivations**:
+          - **Internal Drives**: What does ${character} want emotionally/psychologically?
+          - **External Goals**: What concrete objectives are they pursuing?
+          - **Hidden Desires**: What might they not admit to themselves?
+          
+          **Stakes Assessment**:
+          - **What They Stand to Gain**: Rewards for success
+          - **What They Stand to Lose**: Consequences of failure
+          - **Personal Cost**: What they must sacrifice to achieve their goals
+          
+          **Motivation Strength Analysis**:
+          - Areas where motivations are compelling and clear
+          - Places where motivations feel weak or unclear
+          - Contradictions or conflicts in their desires
+          
+          **Enhancement Recommendations**:
+          1. **Dialogue Opportunities**: Lines that could reveal deeper motivations
+          2. **Action Sequences**: Behaviors that would demonstrate their drives
+          3. **Internal Conflict**: Ways to show competing motivations
+          4. **Backstory Elements**: Past events that could justify current motivations
+          
+          **Character Arc Potential**:
+          Explain how their current motivations could evolve throughout the story.
+          
+          **Reader Investment**:
+          Why should readers care about ${character}'s journey and outcome?
         `;
 
-        const response = await this.model.invoke(prompt);
+        const response = await trackAICall(
+          () => this.callWithTimeout(this.model.invoke(prompt), 'Motivation Analysis'),
+          'Motivation Analysis'
+        );
         return response.content as string;
       } catch (error) {
         console.error('Error evaluating motivation and stakes:', error);
@@ -896,7 +925,10 @@ Focus on sophisticated, literary foreshadowing that enhances rather than telegra
         Provide specific, actionable feedback.
       `;
       
-      const response = await this.model.invoke(prompt);
+      const response = await trackAICall(
+        () => this.callWithTimeout(this.model.invoke(prompt), 'Style Feedback'),
+        'Style Feedback'
+      );
       return response.content as string;
     }
 
@@ -929,7 +961,10 @@ Focus on sophisticated, literary foreshadowing that enhances rather than telegra
         Make each idea detailed and immediately usable.
       `;
       
-      const response = await this.model.invoke(prompt);
+      const response = await trackAICall(
+        () => this.callWithTimeout(this.model.invoke(prompt), 'Brainstorming'),
+        'Brainstorming'
+      );
       return response.content as string;
     }
 
@@ -948,7 +983,10 @@ Focus on sophisticated, literary foreshadowing that enhances rather than telegra
         Provide a helpful, specific response that addresses their needs.
       `;
       
-      const response = await this.model.invoke(prompt);
+      const response = await trackAICall(
+        () => this.callWithTimeout(this.model.invoke(prompt), 'General Query'),
+        'General Query'
+      );
       return response.content as string;
     }
 

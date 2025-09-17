@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
 import { CopilotEditor } from '../components/CopilotEditor';
-import { BookOpen, Circle } from 'lucide-react';
+import { BookOpen, Circle, Save } from 'lucide-react';
 
 export const EditorPage: React.FC = () => {
   const {
@@ -11,35 +11,9 @@ export const EditorPage: React.FC = () => {
 
   const [, setLastSaved] = useState(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const [isHeaderVisible, setIsHeaderVisible] = useState(false);
-  const headerTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Show header temporarily when there are changes or on hover
-  useEffect(() => {
-    if (hasUnsavedChanges) {
-      setIsHeaderVisible(true);
-      
-      // Clear existing timeout
-      if (headerTimeoutRef.current) {
-        clearTimeout(headerTimeoutRef.current);
-      }
-      
-      // Hide header after 3 seconds if no unsaved changes
-      headerTimeoutRef.current = setTimeout(() => {
-        if (!hasUnsavedChanges) {
-          setIsHeaderVisible(false);
-        }
-      }, 3000);
-    } else {
-      setIsHeaderVisible(false);
-    }
-
-    return () => {
-      if (headerTimeoutRef.current) {
-        clearTimeout(headerTimeoutRef.current);
-      }
-    };
-  }, [hasUnsavedChanges]);
+  // Header is now always visible - no auto-hide logic needed
 
   // Auto-save functionality
   useEffect(() => {
@@ -54,6 +28,7 @@ export const EditorPage: React.FC = () => {
 
   const handleSave = useCallback(async (content: string) => {
     if (activeProject) {
+      setIsSaving(true);
       try {
         await updateProject(activeProject.id, { content });
         setLastSaved(new Date());
@@ -62,9 +37,17 @@ export const EditorPage: React.FC = () => {
       } catch (error) {
         console.error('Save failed:', error);
         alert('Failed to save content');
+      } finally {
+        setIsSaving(false);
       }
     }
   }, [activeProject, updateProject]);
+  
+  const handleManualSave = useCallback(async () => {
+    if (activeProject) {
+      await handleSave(activeProject.content || '');
+    }
+  }, [activeProject, handleSave]);
 
   const handleContentChange = (content: string) => {
     if (activeProject) {
@@ -96,21 +79,8 @@ export const EditorPage: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-white">
-      {/* Minimal Header - Auto-hides for distraction-free writing */}
-      <div 
-        className={`
-          transition-all duration-500 ease-in-out border-b border-gray-100 bg-white/95 backdrop-blur-sm
-          ${isHeaderVisible || hasUnsavedChanges ? 'translate-y-0 opacity-100' : '-translate-y-full opacity-0'}
-        `}
-        onMouseEnter={() => setIsHeaderVisible(true)}
-        onMouseLeave={() => {
-          if (!hasUnsavedChanges) {
-            headerTimeoutRef.current = setTimeout(() => {
-              setIsHeaderVisible(false);
-            }, 1000);
-          }
-        }}
-      >
+      {/* Header - Always visible with save button */}
+      <div className="border-b border-gray-100 bg-white shadow-sm">
         <div className="px-8 py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center space-x-4">
@@ -124,12 +94,41 @@ export const EditorPage: React.FC = () => {
               </span>
             </div>
             
-            {hasUnsavedChanges && (
-              <div className="flex items-center space-x-2 text-amber-700 bg-amber-100 px-4 py-2 rounded-full animate-pulse">
-                <Circle className="w-2 h-2 fill-current" />
-                <span className="text-sm font-medium">Auto-saving...</span>
-              </div>
-            )}
+            <div className="flex items-center space-x-3">
+              {hasUnsavedChanges && (
+                <div className="flex items-center space-x-2 text-amber-600 bg-amber-50 px-3 py-1.5 rounded-full">
+                  <Circle className="w-2 h-2 fill-current animate-pulse" />
+                  <span className="text-sm font-medium">Unsaved</span>
+                </div>
+              )}
+              
+              {/* Always Visible Save Button */}
+              <button
+                onClick={handleManualSave}
+                disabled={isSaving}
+                className={`
+                  flex items-center space-x-2 px-5 py-2.5 rounded-lg font-semibold transition-all transform hover:scale-105
+                  ${isSaving 
+                    ? 'bg-gray-100 text-gray-500 cursor-not-allowed' 
+                    : hasUnsavedChanges
+                      ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg'
+                      : 'bg-green-600 hover:bg-green-700 text-white shadow-md'
+                  }
+                `}
+              >
+                {isSaving ? (
+                  <>
+                    <Circle className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <>
+                    <Save className="w-4 h-4" />
+                    <span>{hasUnsavedChanges ? 'Save Project' : 'Saved'}</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       </div>
