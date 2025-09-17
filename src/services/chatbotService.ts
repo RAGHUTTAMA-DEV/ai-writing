@@ -1,6 +1,9 @@
 import ragService from './ragService';
 import aiService from './aiService';
 import { Document } from "langchain/document";
+import { PrismaClient } from '@prisma/client';
+
+const prisma = new PrismaClient();
 
 class ChatbotService {
   // Store user preferences and behavior
@@ -135,6 +138,225 @@ class ChatbotService {
       type: 'writing_flow_questionnaire',
       content: JSON.stringify(answers)
     });
+  }
+
+  // Fast chat mode - quick responses without complex processing but with rich context
+  async fastChat(userId: string, message: string, projectId?: string): Promise<string> {
+    try {
+      // Record the user interaction for context
+      this.recordUserInteraction(userId, {
+        type: 'fast_chat',
+        content: message
+      });
+
+      // Get user preferences for personalized responses
+      const preferences = this.getUserPreferences(userId);
+      
+      // Get recent interaction history for context
+      const recentHistory = this.getUserInteractionHistory(userId).slice(-5);
+      
+      // Get user's other projects data for cross-project references
+      const userProjectsData = await this.getUserProjectsData(userId, projectId);
+      
+      // Build enriched context for fast but intelligent responses
+      let enrichedContext = message;
+      
+      // Add user preferences context
+      if (Object.keys(preferences).length > 0) {
+        enrichedContext += `\n\n[USER PREFERENCES]\n`;
+        enrichedContext += `Writing Style: ${preferences.writingStyle || 'Not specified'}\n`;
+        enrichedContext += `Preferred Genre: ${preferences.genre || 'Not specified'}\n`;
+        enrichedContext += `Tone Preference: ${preferences.tonePreference || 'Not specified'}\n`;
+        enrichedContext += `Favorite Themes: ${preferences.themes?.join(', ') || 'Not specified'}\n`;
+        enrichedContext += `Writing Goals: ${preferences.writingGoals?.join(', ') || 'Not specified'}`;
+      }
+      
+      // Add cross-project context if available
+      if (userProjectsData && userProjectsData.length > 0) {
+        enrichedContext += `\n\n[USER'S OTHER PROJECTS CONTEXT]\n`;
+        userProjectsData.forEach((project, index) => {
+          enrichedContext += `Project ${index + 1}: "${project.title}"\n`;
+          if (project.characters?.length > 0) {
+            enrichedContext += `- Characters: ${project.characters.join(', ')}\n`;
+          }
+          if (project.themes?.length > 0) {
+            enrichedContext += `- Themes: ${project.themes.join(', ')}\n`;
+          }
+          if (project.description) {
+            enrichedContext += `- Description: ${project.description.slice(0, 100)}...\n`;
+          }
+          enrichedContext += `\n`;
+        });
+      }
+      
+      // Add recent conversation context
+      if (recentHistory.length > 0) {
+        enrichedContext += `\n\n[RECENT CONVERSATION CONTEXT]\n`;
+        enrichedContext += recentHistory.map(h => `${h.type}: ${h.content.slice(0, 150)}...`).join('\n');
+      }
+      
+      enrichedContext += `\n\n[INSTRUCTION]\nBased on the user's preferences and their other projects' context above, provide a helpful, personalized response. If they reference "other projects" or "similar characters", use the project data provided to give specific examples and suggestions.`;
+
+      // Use AI service's fast mode with enriched context
+      const response = await aiService.generateSuggestions(
+        enrichedContext,
+        projectId || 'default',
+        userId,
+        'fast' // Use fast mode but with rich context
+      );
+
+      // Record the AI response
+      this.recordUserInteraction(userId, {
+        type: 'fast_chat_response',
+        content: response
+      });
+
+      return response;
+    } catch (error) {
+      console.error('Error in fast chat:', error);
+      return 'Sorry, I encountered an error while processing your message. Please try again.';
+    }
+  }
+
+  // Simple question answering without embedding but with rich user context
+  async quickAnswer(userId: string, question: string, projectId?: string): Promise<string> {
+    try {
+      // Get user preferences from both memory and database
+      const memoryPreferences = this.getUserPreferences(userId);
+      
+      // Get database preferences for richer context
+      const dbPreferences = await prisma.userPreferences.findUnique({
+        where: { userId }
+      });
+      
+      // Get recent interaction history for context
+      const recentHistory = this.getUserInteractionHistory(userId).slice(-3);
+      
+      // Get user's other projects data for cross-project references
+      const userProjectsData = await this.getUserProjectsData(userId, projectId);
+      
+      // Build enriched context-aware prompt
+      let contextualPrompt = `User question: "${question}"`;
+      
+      // Add comprehensive user preferences
+      if (dbPreferences || Object.keys(memoryPreferences).length > 0) {
+        contextualPrompt += `\n\n[USER WRITING PREFERENCES]\n`;
+        contextualPrompt += `Writing Style: ${dbPreferences?.writingStyle || memoryPreferences.writingStyle || 'Not specified'}\n`;
+        contextualPrompt += `Preferred Genre: ${dbPreferences?.genre || memoryPreferences.genre || 'Not specified'}\n`;
+        contextualPrompt += `Tone Preference: ${dbPreferences?.tonePreference || memoryPreferences.tonePreference || 'Not specified'}\n`;
+        contextualPrompt += `Favorite Themes: ${(dbPreferences?.themes || memoryPreferences.themes || []).join(', ') || 'Not specified'}\n`;
+        contextualPrompt += `Writing Goals: ${(dbPreferences?.writingGoals || memoryPreferences.writingGoals || []).join(', ') || 'Not specified'}\n`;
+        if (dbPreferences?.dailyWordGoal) {
+          contextualPrompt += `Daily Word Goal: ${dbPreferences.dailyWordGoal}\n`;
+        }
+      }
+      
+      // Add cross-project context for "other projects" references
+      if (userProjectsData && userProjectsData.length > 0) {
+        contextualPrompt += `\n\n[USER'S OTHER PROJECTS REFERENCE]\n`;
+        userProjectsData.forEach((project, index) => {
+          contextualPrompt += `Project ${index + 1}: "${project.title}" (${project.format})\n`;
+          if (project.characters.length > 0) {
+            contextualPrompt += `- Main Characters: ${project.characters.slice(0, 5).join(', ')}\n`;
+          }
+          if (project.themes.length > 0) {
+            contextualPrompt += `- Themes: ${project.themes.join(', ')}\n`;
+          }
+          if (project.genre) {
+            contextualPrompt += `- Genre: ${project.genre}\n`;
+          }
+          if (project.plotPoints.length > 0) {
+            contextualPrompt += `- Key Plot Elements: ${project.plotPoints.slice(0, 3).join(', ')}\n`;
+          }
+          contextualPrompt += `\n`;
+        });
+      }
+      
+      // Add recent conversation context
+      if (recentHistory.length > 0) {
+        contextualPrompt += `\n\n[RECENT CONVERSATION CONTEXT]\n`;
+        contextualPrompt += recentHistory.map(h => `${h.type}: ${h.content.slice(0, 100)}...`).join('\n');
+      }
+      
+      contextualPrompt += `\n\n[INSTRUCTION]\nBased on the user's writing preferences and their other projects' context above, provide a helpful, personalized answer. If they ask about "other projects" or "similar characters/themes", reference the specific project data provided. Be direct but informative, and tailor your response to their writing style and preferences.`;
+      
+      // Record the interaction
+      this.recordUserInteraction(userId, {
+        type: 'quick_question',
+        content: question
+      });
+
+      // Use AI service fast mode for quick but contextual response
+      const answer = await aiService.generateSuggestions(
+        contextualPrompt,
+        projectId || 'default',
+        userId,
+        'fast'
+      );
+
+      // Record the response
+      this.recordUserInteraction(userId, {
+        type: 'quick_answer',
+        content: answer
+      });
+
+      return answer;
+    } catch (error) {
+      console.error('Error in quick answer:', error);
+      return 'I\'m having trouble processing your question right now. Please try asking again in a moment.';
+    }
+  }
+
+  // Get user's other projects data for cross-project references using existing AI-analyzed data
+  private async getUserProjectsData(userId: string, currentProjectId?: string): Promise<any[]> {
+    try {
+      // Get user's projects (excluding current project if specified)
+      const whereClause: any = { ownerId: userId };
+      if (currentProjectId) {
+        whereClause.id = { not: currentProjectId };
+      }
+      
+      const projects = await prisma.project.findMany({
+        where: whereClause,
+        include: {
+          contexts: {
+            where: { contextType: 'GENERAL' }
+          }
+        },
+        orderBy: { updatedAt: 'desc' },
+        take: 5 // Limit to 5 most recent projects for performance
+      });
+
+      // Transform the data to include AI-analyzed context
+      const projectsData = projects.map(project => {
+        const context = project.contexts && project.contexts.length > 0 ? project.contexts[0] : null; // Get the general context
+        
+        return {
+          id: project.id,
+          title: project.title,
+          description: project.description,
+          format: project.format,
+          type: project.type,
+          // Use AI-analyzed data from ProjectContext
+          characters: context?.characters || [],
+          themes: context?.themes || [],
+          plotPoints: context?.plotPoints || [],
+          settings: context?.settings || [],
+          genre: context?.genre,
+          writingStyle: context?.writingStyle,
+          toneAnalysis: context?.toneAnalysis,
+          wordCount: context?.wordCount || 0,
+          chapterCount: context?.chapterCount || 0,
+          lastAnalyzed: context?.lastAnalyzed,
+          lastUpdated: project.updatedAt
+        };
+      });
+
+      return projectsData;
+    } catch (error) {
+      console.error('Error getting user projects data:', error);
+      return [];
+    }
   }
 }
 

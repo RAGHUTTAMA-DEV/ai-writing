@@ -44,6 +44,27 @@ export class AIService {
   private readonly MAX_WRITING_PATTERNS_SIZE = 50;
   private readonly AI_TIMEOUT_MS = 60000; // 60 second timeout - reasonable for detailed analysis
 
+    // Embedding-free AI method specifically for structure analysis
+    async generateStructureAnalysis(prompt: string): Promise<string> {
+      try {
+        if (!this.model) {
+          throw new Error('AI model not available');
+        }
+        
+        console.log(`🚀 Direct AI call for structure analysis (no embeddings, no RAG)`);
+        
+        const response = await Promise.race([
+          this.model!.invoke(prompt),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Structure analysis timeout')), 30000))
+        ]) as any;
+        
+        return response.content as string;
+      } catch (error) {
+        console.error('Structure analysis AI call failed:', error);
+        throw error;
+      }
+    }
+
     constructor() {
       const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
       

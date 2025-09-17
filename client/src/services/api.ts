@@ -426,6 +426,45 @@ class APIService {
   }> {
     return this.request<any>(`/ai/analytics/${projectId}`);
   }
+
+  // Structure Analysis endpoints
+  async analyzeProjectStructure(projectId: string): Promise<any> {
+    return this.request<any>(`/analytics/structure/${projectId}`, {
+      method: 'POST',
+    });
+  }
+
+  async getChapterSuggestions(content: string, targetChapters?: number): Promise<{
+    message: string;
+    suggestions: string[];
+    estimatedBreaks: number[];
+    contentWordCount: number;
+    suggestedChapters: number;
+  }> {
+    return this.request<any>('/analytics/chapter-suggestions', {
+      method: 'POST',
+      body: JSON.stringify({ content, targetChapters }),
+    });
+  }
+
+  async analyzeChapter(content: string, chapterTitle?: string, themes?: string[], characters?: string[]): Promise<any> {
+    return this.request<any>('/analytics/chapter-analysis', {
+      method: 'POST',
+      body: JSON.stringify({ content, chapterTitle, themes, characters }),
+    });
+  }
+
+  async getStructureSummary(projectId: string): Promise<any> {
+    return this.request<any>(`/analytics/structure-summary/${projectId}`);
+  }
+
+  async compareProjectStructures(): Promise<any> {
+    return this.request<any>('/analytics/structure-comparison');
+  }
+
+  async getEnhancedProjectAnalytics(projectId: string): Promise<any> {
+    return this.request<any>(`/analytics/enhanced/${projectId}`);
+  }
 }
 
 const apiService = new APIService();

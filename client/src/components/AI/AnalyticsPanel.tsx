@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Progress } from '../ui/progress';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { 
   BarChart3, 
   TrendingUp,
@@ -24,8 +25,12 @@ import {
   RefreshCw,
   Database,
   Eye,
-  Hash
+  Hash,
+  Layers,
+  Film,
+  Sparkles
 } from 'lucide-react';
+import { StructureAnalysisPanel } from './StructureAnalysisPanel';
 
 interface AnalyticsPanelProps {
   projectId: string;
@@ -69,6 +74,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
   const [analytics, setAnalytics] = useState<ProjectAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [activeTab, setActiveTab] = useState('overview');
 
   const loadAnalytics = async () => {
     try {
@@ -134,17 +140,85 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
   }
 
   return (
-    <div className="h-full overflow-y-auto space-y-4 p-1">
-      {/* Compact Header */}
-      <div className="flex items-center justify-between px-3 py-2 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border">
+    <div className="h-full flex flex-col">
+      {/* Header */}
+      <div className="flex items-center justify-between p-4 border-b bg-gradient-to-r from-blue-50 to-purple-50">
         <div className="flex items-center space-x-2">
-          <BarChart3 className="h-4 w-4 text-blue-600" />
-          <h2 className="text-sm font-semibold text-gray-900">Analytics</h2>
+          <BarChart3 className="h-5 w-5 text-blue-600" />
+          <h2 className="text-lg font-semibold text-gray-900">Project Analytics</h2>
         </div>
-        <Button onClick={loadAnalytics} variant="outline" size="sm" className="h-7 px-2">
-          <RefreshCw className="w-3 h-3" />
+        <Button onClick={loadAnalytics} variant="outline" size="sm">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Refresh Data
         </Button>
       </div>
+
+      {/* Tabbed Content */}
+      <div className="flex-1 overflow-hidden">
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="h-full flex flex-col">
+          <TabsList className="grid w-full grid-cols-3 mx-4 mt-4">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="structure">
+              <Layers className="w-4 h-4 mr-2" />
+              Structure
+            </TabsTrigger>
+            <TabsTrigger value="details">Details</TabsTrigger>
+          </TabsList>
+
+          <div className="flex-1 overflow-y-auto">
+            <TabsContent value="overview" className="p-4 space-y-4">
+              {renderOverviewContent()}
+            </TabsContent>
+
+            <TabsContent value="structure" className="h-full p-0">
+              <StructureAnalysisPanel projectId={projectId} />
+            </TabsContent>
+
+            <TabsContent value="details" className="p-4 space-y-4">
+              {renderDetailedContent()}
+            </TabsContent>
+          </div>
+        </Tabs>
+      </div>
+    </div>
+  );
+
+  function renderOverviewContent() {
+    if (loading) {
+      return (
+        <div className="flex items-center justify-center h-32">
+          <RefreshCw className="w-6 h-6 animate-spin text-blue-500 mr-2" />
+          <span className="text-gray-600">Loading project analytics...</span>
+        </div>
+      );
+    }
+
+    if (error) {
+      return (
+        <Card>
+          <CardContent className="p-6 text-center">
+            <div className="text-red-500 mb-2">❌</div>
+            <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Analytics</h3>
+            <p className="text-gray-600 mb-4">{error}</p>
+            <Button onClick={loadAnalytics} variant="outline">
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      );
+    }
+
+    if (!analytics) {
+      return (
+        <div className="flex items-center justify-center h-32">
+          <span className="text-gray-600">No analytics data available</span>
+        </div>
+      );
+    }
+
+    return (
+      <>
 
       {/* Project Overview */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -356,65 +430,93 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
           </CardContent>
         </Card>
       )}
+      </>
+    );
+  }
 
-      {/* Project Metadata */}
-      <Card>
-        <CardHeader className="pb-3">
-          <CardTitle className="flex items-center space-x-2">
-            <Hash className="h-5 w-5 text-gray-600" />
-            <span>Project Details</span>
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="text-xs font-medium text-gray-600">Format</p>
-              <p className="text-sm text-gray-900">{analytics.basic.format}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-600">Type</p>
-              <p className="text-sm text-gray-900">{analytics.basic.type}</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-600">Content Length</p>
-              <p className="text-sm text-gray-900">{analytics.basic.contentLength} chars</p>
-            </div>
-            <div>
-              <p className="text-xs font-medium text-gray-600">Last Updated</p>
-              <p className="text-sm text-gray-900">
-                {new Date(analytics.basic.updatedAt).toLocaleDateString()}
-              </p>
-            </div>
-          </div>
-          
-          {analytics.hasRAGData && (
-            <div className="pt-2 border-t">
-              <p className="text-xs font-medium text-gray-600 mb-2">RAG Analytics</p>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-600">Documents:</span> {analytics.analytics.totalDocuments}
-                </div>
-                <div>
-                  <span className="text-gray-600">Word Count:</span> {analytics.analytics.totalWordCount}
-                </div>
+  function renderDetailedContent() {
+    if (!analytics) return null;
+
+    return (
+      <>
+        {/* Project Metadata */}
+        <Card>
+          <CardHeader className="pb-3">
+            <CardTitle className="flex items-center space-x-2">
+              <Hash className="h-5 w-5 text-gray-600" />
+              <span>Project Details</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="text-xs font-medium text-gray-600">Format</p>
+                <p className="text-sm text-gray-900">{analytics.basic.format}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-600">Type</p>
+                <p className="text-sm text-gray-900">{analytics.basic.type}</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-600">Content Length</p>
+                <p className="text-sm text-gray-900">{analytics.basic.contentLength} chars</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium text-gray-600">Last Updated</p>
+                <p className="text-sm text-gray-900">
+                  {new Date(analytics.basic.updatedAt).toLocaleDateString()}
+                </p>
               </div>
             </div>
-          )}
-          
-          {analytics.analytics.semanticTags.length > 0 && (
-            <div className="pt-2 border-t">
-              <p className="text-xs font-medium text-gray-600 mb-2">Semantic Tags</p>
-              <div className="flex flex-wrap gap-1">
-                {analytics.analytics.semanticTags.map((tag) => (
-                  <Badge key={tag} variant="outline" className="text-xs">
-                    {tag}
-                  </Badge>
-                ))}
+            
+            {analytics.hasRAGData && (
+              <div className="pt-2 border-t">
+                <p className="text-xs font-medium text-gray-600 mb-2">RAG Analytics</p>
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span className="text-gray-600">Documents:</span> {analytics.analytics.totalDocuments}
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Word Count:</span> {analytics.analytics.totalWordCount}
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Chunks:</span> {analytics.analytics.totalChunks}
+                  </div>
+                  <div>
+                    <span className="text-gray-600">Avg. Importance:</span> {analytics.analytics.averageImportance.toFixed(2)}
+                  </div>
+                </div>
               </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
-    </div>
-  );
+            )}
+            
+            {analytics.analytics.semanticTags.length > 0 && (
+              <div className="pt-2 border-t">
+                <p className="text-xs font-medium text-gray-600 mb-2">Semantic Tags</p>
+                <div className="flex flex-wrap gap-1">
+                  {analytics.analytics.semanticTags.map((tag) => (
+                    <Badge key={tag} variant="outline" className="text-xs">
+                      {tag}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {analytics.analytics.contentTypes.length > 0 && (
+              <div className="pt-2 border-t">
+                <p className="text-xs font-medium text-gray-600 mb-2">Content Types</p>
+                <div className="flex flex-wrap gap-1">
+                  {analytics.analytics.contentTypes.map((type) => (
+                    <Badge key={type} variant="secondary" className="text-xs">
+                      {type}
+                    </Badge>
+                  ))}
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </>
+    );
+  }
 };

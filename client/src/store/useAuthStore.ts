@@ -16,6 +16,8 @@ interface AuthState {
   token: string | null;
   isAuthenticated: boolean;
   login: (email: string, password: string) => Promise<void>;
+  loginWithGoogle: () => void;
+  handleGoogleCallback: (token: string) => Promise<void>;
   register: (email: string, username: string, password: string, firstName: string, lastName: string) => Promise<void>;
   logout: () => void;
   getProfile: () => Promise<void>;
@@ -43,6 +45,29 @@ export const useAuthStore = create<AuthState>()(
           });
         } catch (error) {
           console.error('Login error:', error);
+          throw error;
+        }
+      },
+
+      loginWithGoogle: () => {
+        const backendUrl = 'http://localhost:5000';
+        window.location.href = `${backendUrl}/api/auth/google`;
+      },
+
+      handleGoogleCallback: async (token: string) => {
+        try {
+          apiService.setToken(token);
+          
+          // Fetch user profile with the token
+          const response = await apiService.getProfile();
+          
+          set({
+            user: response.user,
+            token,
+            isAuthenticated: true
+          });
+        } catch (error) {
+          console.error('Google callback error:', error);
           throw error;
         }
       },

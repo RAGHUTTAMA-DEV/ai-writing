@@ -231,8 +231,8 @@ export class ImprovedRAGService {
       // Load any persisted data
       await this.loadPersistedData();
       
-      // Preload common embeddings if rate limits allow
-      setTimeout(() => this.preloadCommonEmbeddings(), 2000); // Wait 2 seconds after init
+      // DISABLED: Preload common embeddings - causing rate limit issues
+      // setTimeout(() => this.preloadCommonEmbeddings(), 2000);
       
     } catch (error) {
       console.error('❌ Failed to initialize ImprovedRAGService:', error);
@@ -862,28 +862,9 @@ Return only a number between 0.0 and 1.0.`;
       // Add to documents array
       this.documents.push(enhancedDoc);
 
-      // Add to vector store if available and rate limits allow
-      if (this.vectorStore && this.embeddings && this.canMakeEmbeddingCall()) {
-        try {
-          // Try to get cached embedding first
-          const cachedEmbedding = await this.getCachedEmbedding(content);
-          if (cachedEmbedding) {
-            // We have cached embedding, add to vector store
-            await this.vectorStore.addDocuments([enhancedDoc]);
-            console.log('✅ Document added to vector store using cached embedding');
-          } else {
-            console.warn('🛑 Cannot generate embedding due to rate limits, document added to text search only');
-          }
-        } catch (embedError: any) {
-          if (embedError.message?.includes('429') || embedError.message?.includes('quota')) {
-            console.warn('⚠️ Vector store rate limited during document add, document added to text search only');
-          } else {
-            throw embedError;
-          }
-        }
-      } else if (!this.canMakeEmbeddingCall()) {
-        console.log('🛑 Embedding rate limited, document added to text search only');
-      }
+      // FAST MODE: Skip vector store, use text search only
+      console.log('⚡ FAST MODE: Document added to text search only (no embeddings)');
+      // Skip embedding generation for performance
 
   // Update project context
       if (projectId) {
@@ -943,11 +924,9 @@ Return only a number between 0.0 and 1.0.`;
     let result;
     
     try {
-      if (this.aiModel && content.length > 100) { // Only use AI for substantial content
-        result = await this.performAIContentAnalysis(content, projectContext);
-      } else {
-        result = this.performBasicContentAnalysis(content, projectContext);
-      }
+      // FAST MODE: Always use basic analysis for performance
+      console.log('⚡ Using fast basic analysis (no AI calls)');
+      result = this.performBasicContentAnalysis(content, projectContext);
 
       // Cache the result in both caches
       this.semanticCache.set(cacheKey, result);

@@ -22,4 +22,10 @@ router.get('/preferences', chatbotController.getUserPreferences);
 // Update user preferences
 router.put('/preferences', chatbotController.updateUserPreferences);
 
+// Fast chat mode - quick responses without complex processing
+router.post('/fast-chat', chatbotController.fastChat);
+
+// Quick answer mode - direct answers without embedding
+router.post('/quick-answer', chatbotController.quickAnswer);
+
 export default router;

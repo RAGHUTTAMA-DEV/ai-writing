@@ -8,9 +8,10 @@ interface WritingFlowAnswers {
 
 class ChatbotController {
   // Get personalized writing suggestions
-  async getPersonalizedSuggestions(req: AuthenticatedRequest, res: Response): Promise<void> {
+  async getPersonalizedSuggestions(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user!.id;
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.user!.id;
       const { context, projectId } = req.body;
 
       if (!context) {
@@ -39,9 +40,10 @@ class ChatbotController {
   }
 
   // Get writing flow questions
-  async getWritingFlowQuestions(req: AuthenticatedRequest, res: Response): Promise<void> {
+  async getWritingFlowQuestions(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user!.id;
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.user!.id;
       const questions = await chatbotService.askAboutWritingFlow(userId);
 
       res.json({
@@ -57,9 +59,10 @@ class ChatbotController {
   }
 
   // Submit writing flow answers
-  async submitWritingFlowAnswers(req: AuthenticatedRequest, res: Response): Promise<void> {
+  async submitWritingFlowAnswers(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user!.id;
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.user!.id;
       const answers: WritingFlowAnswers = req.body.answers;
 
       if (!answers) {
@@ -83,9 +86,10 @@ class ChatbotController {
   }
 
   // Get user preferences
-  async getUserPreferences(req: AuthenticatedRequest, res: Response): Promise<void> {
+  async getUserPreferences(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user!.id;
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.user!.id;
       const preferences = chatbotService.getUserPreferences(userId);
 
       res.json({
@@ -101,9 +105,10 @@ class ChatbotController {
   }
 
   // Update user preferences
-  async updateUserPreferences(req: AuthenticatedRequest, res: Response): Promise<void> {
+  async updateUserPreferences(req: Request, res: Response): Promise<void> {
     try {
-      const userId = req.user!.id;
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.user!.id;
       const preferences = req.body.preferences;
 
       if (!preferences) {
@@ -122,6 +127,62 @@ class ChatbotController {
       console.error('Error updating user preferences:', error);
       res.status(500).json({ 
         message: 'Server error while updating user preferences' 
+      });
+    }
+  }
+
+  // Fast chat mode - quick AI responses without complex processing
+  async fastChat(req: Request, res: Response): Promise<void> {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.user!.id;
+      const { message, projectId } = req.body;
+
+      if (!message) {
+        res.status(400).json({ 
+          message: 'Message is required' 
+        });
+        return;
+      }
+
+      const response = await chatbotService.fastChat(userId, message, projectId);
+
+      res.json({
+        message: 'Fast chat response generated successfully',
+        response
+      });
+    } catch (error) {
+      console.error('Error in fast chat:', error);
+      res.status(500).json({ 
+        message: 'Server error while generating fast chat response' 
+      });
+    }
+  }
+
+  // Quick answer mode - direct answers without embedding
+  async quickAnswer(req: Request, res: Response): Promise<void> {
+    try {
+      const authReq = req as AuthenticatedRequest;
+      const userId = authReq.user!.id;
+      const { question, projectId } = req.body;
+
+      if (!question) {
+        res.status(400).json({ 
+          message: 'Question is required' 
+        });
+        return;
+      }
+
+      const answer = await chatbotService.quickAnswer(userId, question, projectId);
+
+      res.json({
+        message: 'Quick answer generated successfully',
+        answer
+      });
+    } catch (error) {
+      console.error('Error generating quick answer:', error);
+      res.status(500).json({ 
+        message: 'Server error while generating quick answer' 
       });
     }
   }

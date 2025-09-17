@@ -1,8 +1,9 @@
 import { Request, Response } from 'express';
-import jwt from 'jsonwebtoken';
+import jwt, { SignOptions } from 'jsonwebtoken';
 import bcrypt from 'bcryptjs';
-import prisma from '../prisma';
+import prisma from '../prisma/index';
 import { AuthenticatedRequest } from '../middleware/auth';
+import passport from '../config/passport';
 
 interface RegisterRequest {
   email: string;
@@ -72,10 +73,14 @@ const register = async (req: Request<{}, {}, RegisterRequest>, res: Response): P
     });
 
     // Generate JWT token
+    const jwtOptions: SignOptions = {
+      //@ts-ignore
+      expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+    };
     const token = jwt.sign(
       { userId: user.id },
       process.env.JWT_SECRET as string,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as any
+      jwtOptions
     );
 
     res.status(201).json({
@@ -109,7 +114,12 @@ const login = async (req: Request<{}, {}, LoginRequest>, res: Response): Promise
       return;
     }
 
-    // Check password
+    // Check password (handle OAuth users who don't have passwords)
+    if (!user.password) {
+      res.status(401).json({ message: 'Please use Google sign-in for this account' });
+      return;
+    }
+
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
       res.status(401).json({ message: 'Invalid credentials' });
@@ -117,10 +127,14 @@ const login = async (req: Request<{}, {}, LoginRequest>, res: Response): Promise
     }
 
     // Generate JWT token
+    const jwtOptions: SignOptions = {
+      //@ts-ignore
+      expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+    };
     const token = jwt.sign(
       { userId: user.id },
       process.env.JWT_SECRET as string,
-      { expiresIn: process.env.JWT_EXPIRES_IN || '7d' } as any
+      jwtOptions
     );
 
     // Update last login (optional)
@@ -160,10 +174,11 @@ const logout = async (req: Request, res: Response): Promise<void> => {
   }
 };
 
-const getProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+const getProfile = async (req: Request, res: Response): Promise<void> => {
   try {
+    const authReq = req as AuthenticatedRequest;
     const user = await prisma.user.findUnique({
-      where: { id: req.user!.id },
+      where: { id: authReq.user!.id },
       select: {
         id: true,
         email: true,
@@ -190,12 +205,13 @@ const getProfile = async (req: AuthenticatedRequest, res: Response): Promise<voi
   }
 };
 
-const updateProfile = async (req: AuthenticatedRequest, res: Response): Promise<void> => {
+const updateProfile = async (req: Request, res: Response): Promise<void> => {
   try {
+    const authReq = req as AuthenticatedRequest;
     const { firstName, lastName, bio, avatar } = req.body;
 
     const user = await prisma.user.update({
-      where: { id: req.user!.id },
+      where: { id: authReq.user!.id },
       data: {
         firstName,
         lastName,
@@ -226,10 +242,89 @@ const updateProfile = async (req: AuthenticatedRequest, res: Response): Promise<
   }
 };
 
+// Google OAuth handlers
+const googleAuth = passport.authenticate('google', {
+  scope: ['profile', 'email'],
+});
+
+const googleCallback = (req: Request, res: Response): void => {
+  passport.authenticate('google', { failureRedirect: '/login' })(req, res, async () => {
+    try {
+      const user = req.user as any;
+      
+      if (!user) {
+        return res.redirect('/login?error=authentication_failed');
+      }
+
+      // Generate JWT token
+      const jwtOptions: SignOptions = {
+        //@ts-ignore
+        expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+      };
+      const token = jwt.sign(
+        { userId: user.id },
+        process.env.JWT_SECRET as string,
+        jwtOptions
+      );
+
+      // Redirect to frontend with token (you can customize this URL)
+      const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+      res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
+    } catch (error) {
+      console.error('Google OAuth callback error:', error);
+      res.redirect('/login?error=server_error');
+    }
+  });
+};
+
+const googleAuthSuccess = async (req: Request, res: Response): Promise<void> => {
+  try {
+    const user = req.user as any;
+    
+    if (!user) {
+      res.status(401).json({ message: 'Authentication failed' });
+      return;
+    }
+
+    // Generate JWT token
+    const jwtOptions: SignOptions = {
+      //@ts-ignore
+            expiresIn: process.env.JWT_EXPIRES_IN || '7d'
+    };
+    const token = jwt.sign(
+      { userId: user.id },
+      process.env.JWT_SECRET as string,
+      jwtOptions
+    );
+
+    const userResponse = {
+      id: user.id,
+      email: user.email,
+      username: user.username,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      role: user.role,
+      avatar: user.avatar
+    };
+
+    res.json({
+      message: 'Google login successful',
+      user: userResponse,
+      token
+    });
+  } catch (error) {
+    console.error('Google auth success error:', error);
+    res.status(500).json({ message: 'Server error during Google authentication' });
+  }
+};
+
 export {
   register,
   login,
   logout,
   getProfile,
-  updateProfile
+  updateProfile,
+  googleAuth,
+  googleCallback,
+  googleAuthSuccess
 };

@@ -7,6 +7,7 @@ import { AIToolsPanel } from '../components/AI/AIToolsPanel';
 import { ChatbotPanel } from '../components/AI/ChatbotPanel';
 import { RAGSearchPanel } from '../components/AI/RAGSearchPanel';
 import { AnalyticsPanel } from '../components/AI/AnalyticsPanel';
+import { StructureAnalysisPanel } from '../components/AI/StructureAnalysisPanel';
 import { WelcomeScreen } from '../components/Dashboard/WelcomeScreen';
 import { PreferencesPage } from './PreferencesPage';
 import { Icon } from '../components/ui/icon';
@@ -89,6 +90,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
       gradient: 'from-red-400 to-pink-500'
     },
     {
+      id: 'structure',
+      label: 'Structure',
+      icon: 'layers',
+      gradient: 'from-indigo-400 to-purple-500'
+    },
+    {
       id: 'preferences',
       label: 'Settings',
       icon: 'settings',
@@ -118,6 +125,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
         return <RAGSearchPanel projectId={activeProject.id} />;
       case 'analytics':
         return <AnalyticsPanel projectId={activeProject.id} />;
+      case 'structure':
+        return <StructureAnalysisPanel projectId={activeProject.id} />;
       case 'preferences':
         return <PreferencesPage />;
       default:

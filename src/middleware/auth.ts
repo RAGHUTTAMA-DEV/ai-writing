@@ -1,6 +1,6 @@
-import { Request, Response, NextFunction } from 'express';
+import { Request, Response, NextFunction, RequestHandler } from 'express';
 import jwt from 'jsonwebtoken';
-import prisma from '../prisma';
+import prisma from '../prisma/index';
 
 interface JwtPayload {
   userId: string;
@@ -17,8 +17,9 @@ interface AuthenticatedRequest extends Request {
   };
 }
 
-const authenticateToken = async (req: AuthenticatedRequest, res: Response, next: NextFunction): Promise<void> => {
-  const authHeader = req.headers['authorization'];
+const authenticateToken: RequestHandler = async (req: Request, res: Response, next: NextFunction): Promise<void> => {
+  const authReq = req as AuthenticatedRequest;
+  const authHeader = authReq.headers['authorization'];
   const token = authHeader && authHeader.split(' ')[1]; // Bearer TOKEN
 
   if (!token) {
@@ -45,7 +46,7 @@ const authenticateToken = async (req: AuthenticatedRequest, res: Response, next:
       return;
     }
 
-    req.user = user;
+    authReq.user = user;
     next();
   } catch (error: any) {
     if (error.name === 'TokenExpiredError') {
@@ -61,14 +62,15 @@ const authenticateToken = async (req: AuthenticatedRequest, res: Response, next:
   }
 };
 
-const authorizeRole = (roles: string[]) => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction): void => {
-    if (!req.user) {
+const authorizeRole = (roles: string[]): RequestHandler => {
+  return (req: Request, res: Response, next: NextFunction): void => {
+    const authReq = req as AuthenticatedRequest;
+    if (!authReq.user) {
       res.status(401).json({ message: 'Authentication required' });
       return;
     }
 
-    if (!roles.includes(req.user.role)) {
+    if (!roles.includes(authReq.user.role)) {
       res.status(403).json({ message: 'Insufficient permissions' });
       return;
     }

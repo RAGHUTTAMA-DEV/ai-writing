@@ -5,7 +5,10 @@ import {
   login,
   logout,
   getProfile,
-  updateProfile
+  updateProfile,
+  googleAuth,
+  googleCallback,
+  googleAuthSuccess
 } from '../controllers/authController';
 
 const router: Router = Router();
@@ -14,6 +17,11 @@ const router: Router = Router();
 router.post('/register', register);
 router.post('/login', login);
 router.post('/logout', logout);
+
+// Google OAuth routes
+router.get('/google', googleAuth);
+router.get('/google/callback', googleCallback);
+router.get('/google/success', googleAuthSuccess);
 
 // Protected routes
 router.get('/profile', authenticateToken, getProfile);
