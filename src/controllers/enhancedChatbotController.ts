@@ -229,6 +229,9 @@ export const updateUserPreferences = async (req: Request, res: Response): Promis
       return;
     }
 
+    // Convert dailyWordGoal to integer if it's a string
+    const dailyWordGoal = preferences.dailyWordGoal ? parseInt(preferences.dailyWordGoal.toString()) : null;
+    
     const updatedPreferences = await prisma.userPreferences.upsert({
       where: { userId },
       update: {
@@ -237,7 +240,7 @@ export const updateUserPreferences = async (req: Request, res: Response): Promis
         tonePreference: preferences.tonePreference,
         themes: preferences.themes || [],
         writingGoals: preferences.writingGoals || [],
-        dailyWordGoal: preferences.dailyWordGoal,
+        dailyWordGoal: dailyWordGoal,
         preferences: preferences
       },
       create: {
@@ -247,7 +250,7 @@ export const updateUserPreferences = async (req: Request, res: Response): Promis
         tonePreference: preferences.tonePreference,
         themes: preferences.themes || [],
         writingGoals: preferences.writingGoals || [],
-        dailyWordGoal: preferences.dailyWordGoal,
+        dailyWordGoal: dailyWordGoal,
         preferences: preferences
       }
     });

@@ -250,41 +250,68 @@ Continue with the most natural next 2-4 words that would flow perfectly. Only pr
         return cachedSuggestion;
       }
 
-      // FAST MODE: Skip complex processing for speed
+      // FAST MODE: Skip complex processing for speed but include user preferences
       if (analysisMode === 'fast') {
-        console.log(`⚡ ULTRA-FAST MODE: Direct AI suggestion without RAG search`);
+        console.log(`⚡ PERSONALIZED FAST MODE: Using user preferences for tailored suggestions`);
         
-        // Enhanced prompt for high-quality writing assistance
+        // Get user preferences for personalized suggestions
+        let userPreferences = null;
+        if (userId) {
+          try {
+            userPreferences = await prisma.userPreferences.findUnique({
+              where: { userId }
+            });
+            console.log(`👤 User preferences loaded:`, userPreferences ? 'Found' : 'Not found');
+          } catch (error) {
+            console.log('⚠️ Could not load user preferences:', error);
+          }
+        }
+        
+        // Build personalized prompt based on user preferences
+        let personalizedContext = '';
+        if (userPreferences) {
+          personalizedContext = `\n\nUSER'S WRITING PREFERENCES:
+- Writing Style: ${userPreferences.writingStyle || 'Not specified'}
+- Genre: ${userPreferences.genre || 'Not specified'}
+- Tone Preference: ${userPreferences.tonePreference || 'Not specified'}
+- Themes: ${userPreferences.themes?.join(', ') || 'Not specified'}
+- Writing Goals: ${userPreferences.writingGoals?.join(', ') || 'Not specified'}
+
+IMPORTANT: Tailor your suggestions to match the user's preferences. If their preference is "${userPreferences.genre || 'action'}", don't suggest deep romantic elements unless relevant. If they prefer "${userPreferences.writingStyle || 'concise'}", focus on that style.`;
+        }
+        
+        // Enhanced prompt with personalization
         const prompt = `You are an expert writing coach and literary editor. Analyze this text comprehensively:
 
 "${context.slice(-300)}"
+${personalizedContext}
 
-Provide a thorough analysis with immediate fixes and creative improvements.
+Provide a thorough analysis with immediate fixes and creative improvements tailored to the user's preferences.
 
 Format your response EXACTLY like this:
 
 SUMMARY:
-[Brief analysis of the text's strengths, weaknesses, tone, and style - 2-3 sentences]
+[Brief analysis of the text's strengths, weaknesses, tone, and style - 2-3 sentences. Reference user preferences when relevant.]
 
 CORRECTED VERSION:
 [Provide corrected text with spelling/grammar fixes, or "No corrections needed"]
 
 SUGGESTIONS:
-1. [Specific improvement for style, flow, or clarity]
-2. [Character development or plot enhancement suggestion]
-3. [Dialogue, description, or pacing improvement]
-4. [Theme, mood, or literary technique suggestion]
+1. [Specific improvement for style, flow, or clarity - tailored to user's writing style preference]
+2. [Character development or plot enhancement - aligned with user's genre preference]
+3. [Dialogue, description, or pacing improvement - matching user's tone preference]
+4. [Theme, mood, or literary technique - incorporating user's preferred themes]
 
 SUMMARY:`;
         
-        console.log(`🤖 Invoking AI model for HIGH-QUALITY suggestions...`);
+        console.log(`🤖 Invoking AI model for PERSONALIZED suggestions...`);
         const response = await Promise.race([
           this.model!.invoke(prompt),
           new Promise((_, reject) => setTimeout(() => reject(new Error('Quality timeout')), 15000)) // 15 second max for quality results
         ]) as any;
         
         const suggestions = response.content as string;
-        console.log(`✅ FAST AI suggestions generated`);
+        console.log(`✅ PERSONALIZED AI suggestions generated`);
         
         // No caching for fast mode - always fresh results
         return suggestions;

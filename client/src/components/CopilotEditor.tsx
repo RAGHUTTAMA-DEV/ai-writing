@@ -311,6 +311,44 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
   const closeAIAssistant = () => {
     setAiAssistant(prev => ({ ...prev, isOpen: false, query: '', suggestions: [], isProcessing: false }));
   };
+  
+  const generateGeneralSuggestions = async () => {
+    if (!projectId) return;
+    
+    setAiAssistant(prev => ({ ...prev, isProcessing: true }));
+    
+    try {
+      const recentText = content.slice(-300); // Last 300 characters
+      const prompt = `The user is writing and wants general writing help.
+      
+      Recent context: "${recentText}"
+      
+      Provide helpful general writing suggestions, tips, and creative ideas they can use right now. Focus on practical advice they can immediately apply to improve their writing.`;
+      
+      const response = await apiService.generateAISuggestions(projectId, prompt, 'fast');
+      
+      // Parse the response to create general suggestions
+      const responseText = response.suggestions || '';
+      
+      // For general suggestions, create a different format
+      const suggestions = [
+        {
+          type: 'general',
+          text: responseText,
+          label: 'Writing Tips & Suggestions'
+        }
+      ];
+      
+      setAiAssistant(prev => ({ 
+        ...prev, 
+        isProcessing: false, 
+        suggestions 
+      }));
+    } catch (error) {
+      console.error('Error generating general suggestions:', error);
+      setAiAssistant(prev => ({ ...prev, isProcessing: false }));
+    }
+  };
 
   const handleAIQuery = async () => {
     if (!aiAssistant.query.trim() || !projectId) return;
@@ -318,64 +356,96 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     setAiAssistant(prev => ({ ...prev, isProcessing: true, suggestions: [] }));
     
     try {
-      const contextText = aiAssistant.selectedText || content.slice(Math.max(0, aiAssistant.selectionStart - 100), aiAssistant.selectionEnd + 100);
-      const prompt = `Selected text: "${aiAssistant.selectedText}"
-      Context: "${contextText}"
-      User request: ${aiAssistant.query}
+      let prompt;
       
-      Please provide suggestions to modify the selected text based on the user's request. Provide 2-3 different options.`;
+      if (aiAssistant.selectedText) {
+        // User has selected text - provide specific suggestions for that text
+        const contextText = content.slice(Math.max(0, aiAssistant.selectionStart - 100), aiAssistant.selectionEnd + 100);
+        prompt = `Selected text: "${aiAssistant.selectedText}"
+        Context: "${contextText}"
+        User request: ${aiAssistant.query}
+        
+        Please provide suggestions to modify the selected text based on the user's request.`;
+      } else {
+        // No text selected - provide general writing assistance
+        const recentText = content.slice(-500); // Last 500 characters for context
+        prompt = `User is writing and needs help with: ${aiAssistant.query}
+        
+        Recent writing context: "${recentText}"
+        
+        Provide helpful writing guidance, tips, and suggestions based on their request. Include both general advice and specific examples they can use.`;
+      }
       
       const response = await apiService.generateAISuggestions(projectId, prompt, 'fast');
       
-      // Parse enhanced response with summary, corrections, and suggestions
+      // Parse response with summary, correction, and suggestions
       const responseText = response.suggestions || '';
+      console.log('Full response text:', responseText);
       
-      // Extract summary
-      const summaryMatch = responseText.match(/SUMMARY:\\s*([\\s\\S]*?)(?=\\n\\nCORRECTED VERSION:|CORRECTED VERSION:|$)/);
+      // Extract summary (analysis)
+      const summaryMatch = responseText.match(/SUMMARY:\s*([\s\S]*?)(?=\nCORRECTED VERSION:|CORRECTED VERSION:|$)/i);
       const summary = summaryMatch ? summaryMatch[1].trim() : '';
+      console.log('Summary:', summary);
       
-      // Extract corrected version
-      const correctionMatch = responseText.match(/CORRECTED VERSION:\\s*([\\s\\S]*?)(?=\\n\\nSUGGESTIONS:|SUGGESTIONS:|$)/);
+      // Extract corrected version  
+      const correctionMatch = responseText.match(/CORRECTED VERSION:\s*([\s\S]*?)(?=\nSUGGESTIONS:|SUGGESTIONS:|$)/i);
       const correctedText = correctionMatch ? correctionMatch[1].trim() : '';
+      console.log('Corrected text:', correctedText);
       
       // Extract suggestions section
-      const suggestionsMatch = responseText.match(/SUGGESTIONS:\\s*([\\s\\S]*?)$/);
+      const suggestionsMatch = responseText.match(/SUGGESTIONS:\s*([\s\S]*?)$/i);
       const suggestionsText = suggestionsMatch ? suggestionsMatch[1] : '';
+      console.log('Suggestions text:', suggestionsText);
       
-      // Parse individual suggestions
-      const suggestionLines = suggestionsText.split('\\n').filter(line => 
-        line.match(/^\\d+\./)
-      ).map(line => line.replace(/^\\d+\\.\\s*/, '').trim());
+      // Parse individual suggestions (match numbered items)
+      const suggestionMatches = suggestionsText.match(/\d+\.[\s\S]*?(?=\d+\.|$)/g) || [];
+      const individualSuggestions = suggestionMatches.map(match => 
+        match.replace(/^\d+\.\s*/, '').trim()
+      ).filter(text => text.length > 0);
+      console.log('Individual suggestions:', individualSuggestions);
       
       const suggestions = [];
       
-      // Add summary as first item if it exists
+      // Add summary first (for analysis)
       if (summary) {
         suggestions.push({
           type: 'summary',
           text: summary,
-          label: 'Analysis Summary'
+          label: 'Analysis'
         });
       }
       
-      // Add correction as second item if it exists and is different
+      // Clean and add correction if it exists and is different from original
       if (correctedText && 
           correctedText !== 'No corrections needed' && 
           correctedText !== aiAssistant.selectedText) {
+        
+        // Clean the corrected text by removing quotes and extra formatting
+        let cleanCorrectedText = correctedText.trim();
+        
+        // Remove surrounding quotes if they exist
+        if ((cleanCorrectedText.startsWith('"') && cleanCorrectedText.endsWith('"')) ||
+            (cleanCorrectedText.startsWith("'") && cleanCorrectedText.endsWith("'"))) {
+          cleanCorrectedText = cleanCorrectedText.slice(1, -1);
+        }
+        
+        console.log('Original corrected text:', correctedText);
+        console.log('Cleaned corrected text:', cleanCorrectedText);
+        
         suggestions.push({
-          type: 'correction',
-          text: correctedText,
+          type: 'correction', 
+          text: cleanCorrectedText,
           label: 'Apply Correction'
         });
       }
       
       // Add individual suggestions
-      suggestionLines.forEach((suggestion, index) => {
+      individualSuggestions.forEach((suggestion, index) => {
         if (suggestion.trim()) {
           suggestions.push({
             type: 'suggestion',
             text: suggestion,
-            label: `Apply Suggestion ${index + 1}`
+            label: `Suggestion ${index + 1}`
           });
         }
       });
@@ -392,33 +462,49 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
   };
 
   const applySuggestion = (suggestion: any) => {
-    if (!textareaRef.current) return;
+    console.log('Apply suggestion called:', suggestion);
+    console.log('Selection start:', aiAssistant.selectionStart);
+    console.log('Selection end:', aiAssistant.selectionEnd);
+    console.log('Selected text:', aiAssistant.selectedText);
     
-    // Summary is just informational, don't apply to text
-    if (suggestion.type === 'summary') {
-      // Just close the assistant, summary is read-only
+    if (!textareaRef.current) {
+      console.log('No textarea ref');
+      return;
+    }
+    
+    // Summary and general suggestions are just informational, don't apply to text
+    if (suggestion.type === 'summary' || suggestion.type === 'general') {
+      console.log('Read-only suggestion, closing assistant');
       closeAIAssistant();
       return;
     }
     
-    // For corrections and suggestions, replace the selected text
-    const beforeText = content.substring(0, aiAssistant.selectionStart);
-    const afterText = content.substring(aiAssistant.selectionEnd);
-    const newContent = beforeText + suggestion.text + afterText;
-    
-    setContent(newContent);
-    onChange(newContent);
-    
-    // Update cursor position
-    const newCursorPos = aiAssistant.selectionStart + suggestion.text.length;
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-        textareaRef.current.focus();
-      }
-    }, 0);
-    
-    closeAIAssistant();
+    // For corrections, replace the selected text only
+    if (suggestion.type === 'correction') {
+      const beforeText = content.substring(0, aiAssistant.selectionStart);
+      const afterText = content.substring(aiAssistant.selectionEnd);
+      const newContent = beforeText + suggestion.text + afterText;
+      
+      console.log('Before text:', beforeText);
+      console.log('After text:', afterText);
+      console.log('New content:', newContent);
+      
+      setContent(newContent);
+      onChange(newContent);
+      
+      // Update cursor position to end of replaced text
+      const newCursorPos = aiAssistant.selectionStart + suggestion.text.length;
+      setTimeout(() => {
+        if (textareaRef.current) {
+          textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
+          textareaRef.current.focus();
+        }
+      }, 0);
+      
+      closeAIAssistant();
+    } else {
+      console.log('Unknown suggestion type:', suggestion.type);
+    }
   };
 
   // Calculate text metrics for positioning
@@ -622,7 +708,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       {/* Cursor-style AI Assistant Modal */}
       {aiAssistant.isOpen && (
         <div className="fixed inset-0 bg-black/20 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[80vh] overflow-hidden">
+          <div className="bg-white rounded-2xl shadow-2xl border border-gray-200 w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
             {/* Header */}
             <div className="px-6 py-4 border-b border-gray-100 bg-gradient-to-r from-blue-50 to-purple-50">
               <div className="flex items-center justify-between">
@@ -650,7 +736,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
             </div>
 
             {/* Input */}
-            <div className="p-6">
+            <div className="p-6 flex-shrink-0">
               <div className="space-y-4">
                 <div>
                   <label className="text-sm font-medium text-gray-700 block mb-2">
@@ -690,15 +776,18 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
                   </div>
                 </div>
 
-                {/* Quick Actions */}
+                {/* Quick Actions - Clean and Simple */}
                 <div className="flex flex-wrap gap-2">
                   {[
                     'Fix spelling and grammar',
                     'Make it more professional',
-                    'Simplify the language',
+                    'Simplify the language', 
                     'Add more details',
                     'Make it shorter',
-                    'Improve clarity'
+                    'Improve clarity',
+                    'Give me writing tips',
+                    'Suggest plot ideas',
+                    'Help with dialogue'
                   ].map((quickAction) => (
                     <button
                       key={quickAction}
@@ -712,37 +801,29 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
               </div>
             </div>
 
-            {/* Suggestions */}
+            {/* AI Response - Scrollable */}
             {aiAssistant.suggestions.length > 0 && (
-              <div className="px-6 pb-6">
-                <div className="space-y-3">
-                  <h4 className="font-medium text-gray-900">AI Suggestions:</h4>
-                  {aiAssistant.suggestions.map((suggestion, index) => (
-                    <div key={index} className={`border rounded-xl p-4 transition-colors ${
+              <div className="flex-1 overflow-y-auto px-6 pb-6">
+                <div className="space-y-4">
+                  {/* Analysis & Correction Section */}
+                  {aiAssistant.suggestions.filter(s => s.type === 'summary' || s.type === 'correction').map((suggestion, index) => (
+                    <div key={`top-${index}`} className={`border rounded-xl p-4 ${
                       suggestion.type === 'summary' 
                         ? 'border-blue-200 bg-blue-50/30' 
-                        : suggestion.type === 'correction' 
-                        ? 'border-green-200 bg-green-50/50 hover:border-green-300 group' 
-                        : 'border-gray-200 hover:border-blue-300 group'
+                        : 'border-green-200 bg-green-50/50 hover:border-green-300 group'
                     }`}>
                       <div className="flex items-start justify-between">
-                        <div className={`flex-1 ${suggestion.type === 'summary' ? '' : 'pr-4'}`}>
+                        <div className={`flex-1 ${suggestion.type === 'correction' ? 'pr-4' : ''}`}>
                           {suggestion.type === 'summary' && (
                             <div className="flex items-center space-x-2 mb-3">
                               <Icon name="info" size="sm" className="text-blue-600" />
-                              <span className="text-sm font-medium text-blue-700">Writing Analysis</span>
+                              <span className="text-sm font-medium text-blue-700">Analysis</span>
                             </div>
                           )}
                           {suggestion.type === 'correction' && (
                             <div className="flex items-center space-x-2 mb-2">
                               <Icon name="check-circle" size="sm" className="text-green-600" />
-                              <span className="text-sm font-medium text-green-700">Corrected Version</span>
-                            </div>
-                          )}
-                          {suggestion.type === 'suggestion' && (
-                            <div className="flex items-center space-x-2 mb-2">
-                              <Icon name="lightbulb" size="sm" className="text-amber-600" />
-                              <span className="text-sm font-medium text-amber-700">Writing Suggestion</span>
+                              <span className="text-sm font-medium text-green-700">Correction</span>
                             </div>
                           )}
                           <p className={`leading-relaxed ${
@@ -753,21 +834,41 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
                             {suggestion.text}
                           </p>
                         </div>
-                        {suggestion.type !== 'summary' && (
+                        {suggestion.type === 'correction' && (
                           <button
                             onClick={() => applySuggestion(suggestion)}
-                            className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors opacity-0 group-hover:opacity-100 ${
-                              suggestion.type === 'correction'
-                                ? 'bg-green-600 hover:bg-green-700'
-                                : 'bg-blue-600 hover:bg-blue-700'
-                            }`}
+                            className="px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors opacity-0 group-hover:opacity-100 bg-green-600 hover:bg-green-700"
                           >
-                            {suggestion.type === 'correction' ? 'Apply Fix' : 'Apply Suggestion'}
+                            Apply Fix
                           </button>
                         )}
                       </div>
                     </div>
                   ))}
+                  
+                  {/* Writing Suggestions Section */}
+                  {aiAssistant.suggestions.filter(s => s.type === 'suggestion').length > 0 && (
+                    <div className="pb-4">
+                      <h4 className="font-medium text-gray-900 mb-3 mt-6 sticky top-0 bg-white py-2 border-b border-gray-100">Writing Suggestions:</h4>
+                      <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                        {aiAssistant.suggestions.filter(s => s.type === 'suggestion').map((suggestion, index) => (
+                          <div key={`suggestion-${index}`} className="border border-gray-200 rounded-xl p-4 bg-white hover:border-blue-300 transition-colors hover:shadow-sm">
+                            <div className="flex items-start justify-between">
+                              <div className="flex-1">
+                                <div className="flex items-center space-x-2 mb-2">
+                                  <Icon name="lightbulb" size="sm" className="text-amber-600" />
+                                  <span className="text-sm font-medium text-amber-700">{suggestion.label}</span>
+                                </div>
+                                <p className="text-gray-800 leading-relaxed text-sm">
+                                  {suggestion.text}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
