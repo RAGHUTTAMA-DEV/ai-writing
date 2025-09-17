@@ -1,7 +1,8 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useEditorStore } from '../../store/useEditorStore';
 import { useAIStore } from '../../store/useAIStore';
 import { Button } from '../ui/button';
+import apiService from '../../services/api';
 import { 
   Save, 
   Eye,
@@ -19,6 +20,12 @@ import {
 
 interface EditorPanelProps {
   projectId: string;
+}
+
+interface AutocompleteSuggestion {
+  text: string;
+  position: number;
+  type: 'autocomplete' | 'completion';
 }
 
 export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
@@ -44,8 +51,119 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [focusMode, setFocusMode] = useState(false);
-
+  
+  // AI Autocomplete state
+  const [autocompleteSuggestion, setAutocompleteSuggestion] = useState<AutocompleteSuggestion | null>(null);
+  const [showAutocompleteSuggestion, setShowAutocompleteSuggestion] = useState(false);
+  const [isLoadingAutocomplete, setIsLoadingAutocomplete] = useState(false);
+  
   const editorRef = useRef<HTMLTextAreaElement>(null);
+  const autocompleteTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autocompleteAbortRef = useRef<AbortController | null>(null);
+  const autocompleteCacheRef = useRef<Map<string, { suggestion: string; timestamp: number }>>(new Map());
+
+  // Fast AI autocomplete function with caching
+  const triggerAutocomplete = useCallback(async (text: string, cursorPos: number) => {
+    if (text.length < 5 || !projectId) return;
+    
+    // Cancel any ongoing request
+    if (autocompleteAbortRef.current) {
+      autocompleteAbortRef.current.abort();
+    }
+    
+    // Create cache key based on context around cursor
+    const contextStart = Math.max(0, cursorPos - 30);
+    const contextEnd = Math.min(text.length, cursorPos + 10);
+    const context = text.slice(contextStart, contextEnd);
+    const cacheKey = `${context}_${cursorPos}`;
+    
+    // Check cache first (valid for 3 minutes)
+    const cached = autocompleteCacheRef.current.get(cacheKey);
+    const now = Date.now();
+    if (cached && (now - cached.timestamp) < 3 * 60 * 1000) {
+      setAutocompleteSuggestion({
+        text: cached.suggestion,
+        position: cursorPos,
+        type: 'autocomplete'
+      });
+      setShowAutocompleteSuggestion(true);
+      return;
+    }
+    
+    try {
+      setIsLoadingAutocomplete(true);
+      
+      // Create new abort controller
+      const abortController = new AbortController();
+      autocompleteAbortRef.current = abortController;
+      
+      const response = await apiService.generateAutocomplete(text, cursorPos, projectId, abortController.signal);
+      
+      // Check if request was aborted
+      if (abortController.signal.aborted) {
+        return;
+      }
+      
+      if (response.suggestion && response.suggestion.trim()) {
+        // Cache the result
+        autocompleteCacheRef.current.set(cacheKey, {
+          suggestion: response.suggestion,
+          timestamp: now
+        });
+        
+        // Clean old cache entries (keep only last 15)
+        if (autocompleteCacheRef.current.size > 15) {
+          const entries = Array.from(autocompleteCacheRef.current.entries());
+          entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
+          autocompleteCacheRef.current.clear();
+          entries.slice(0, 15).forEach(([key, value]) => {
+            autocompleteCacheRef.current.set(key, value);
+          });
+        }
+        
+        setAutocompleteSuggestion({
+          text: response.suggestion,
+          position: cursorPos,
+          type: 'autocomplete'
+        });
+        setShowAutocompleteSuggestion(true);
+      }
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        return; // Request was cancelled, ignore
+      }
+      console.error('Autocomplete error:', error);
+    } finally {
+      setIsLoadingAutocomplete(false);
+      autocompleteAbortRef.current = null;
+    }
+  }, [projectId]);
+  
+  // Accept autocomplete suggestion
+  const acceptAutocompleteSuggestion = useCallback(() => {
+    if (!autocompleteSuggestion || !editorRef.current) return;
+    
+    const textarea = editorRef.current;
+    const beforeSuggestion = content.substring(0, autocompleteSuggestion.position);
+    const afterSuggestion = content.substring(autocompleteSuggestion.position);
+    const newContent = beforeSuggestion + autocompleteSuggestion.text + afterSuggestion;
+    const newCursorPos = autocompleteSuggestion.position + autocompleteSuggestion.text.length;
+    
+    setContent(newContent);
+    setAutocompleteSuggestion(null);
+    setShowAutocompleteSuggestion(false);
+    
+    setTimeout(() => {
+      textarea.setSelectionRange(newCursorPos, newCursorPos);
+      textarea.focus();
+    }, 0);
+  }, [autocompleteSuggestion, content, setContent]);
+  
+  // Dismiss autocomplete suggestion
+  const dismissAutocompleteSuggestion = useCallback(() => {
+    setAutocompleteSuggestion(null);
+    setShowAutocompleteSuggestion(false);
+  }, []);
 
   // Auto-save with improved UX
   useEffect(() => {
@@ -67,8 +185,29 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
   }, [content, autoSaveEnabled, isDirty, saveContent]);
 
   const handleTextareaChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setContent(e.target.value);
+    const newContent = e.target.value;
+    const cursorPos = e.target.selectionStart;
+    
+    setContent(newContent);
     if (saveStatus !== 'idle') setSaveStatus('idle');
+    
+    // Hide current autocomplete suggestion when typing
+    if (showAutocompleteSuggestion) {
+      setShowAutocompleteSuggestion(false);
+      setAutocompleteSuggestion(null);
+    }
+    
+    // Clear existing autocomplete timeout
+    if (autocompleteTimeoutRef.current) {
+      clearTimeout(autocompleteTimeoutRef.current);
+    }
+    
+    // Set fast timeout for AI autocomplete (800ms for snappy response)
+    if (newContent.length > 5) {
+      autocompleteTimeoutRef.current = setTimeout(() => {
+        triggerAutocomplete(newContent, cursorPos);
+      }, 800);
+    }
   };
 
   const handleTextSelection = () => {
@@ -94,15 +233,40 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
   };
 
   const handleAISuggest = async () => {
-    const textToAnalyze = selectedText || content.slice(-500); // Last 500 chars for context
+    const textToAnalyze = selectedText || content.slice(-300); // Reduced to 300 chars for faster processing
     if (textToAnalyze.trim()) {
-      await generateSuggestions(projectId, `Provide writing suggestions for: ${textToAnalyze}`);
+      // Use fast mode for quicker suggestions
+      await generateSuggestions(projectId, `Provide writing suggestions for: ${textToAnalyze}`, 'fast');
     }
   };
 
-  // Enhanced keyboard shortcuts
+  // Enhanced keyboard shortcuts with autocomplete support
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // Tab to accept autocomplete suggestion
+      if (e.key === 'Tab' && autocompleteSuggestion && showAutocompleteSuggestion) {
+        e.preventDefault();
+        acceptAutocompleteSuggestion();
+        return;
+      }
+      
+      // Escape to dismiss autocomplete suggestion
+      if (e.key === 'Escape' && showAutocompleteSuggestion) {
+        e.preventDefault();
+        dismissAutocompleteSuggestion();
+        return;
+      }
+      
+      // Ctrl+Space to manually trigger autocomplete
+      if ((e.ctrlKey || e.metaKey) && e.key === ' ') {
+        e.preventDefault();
+        if (editorRef.current) {
+          const cursorPos = editorRef.current.selectionStart;
+          triggerAutocomplete(content, cursorPos);
+        }
+        return;
+      }
+      
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         handleSave();
@@ -115,11 +279,16 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
         e.preventDefault();
         setIsFullscreen(!isFullscreen);
       }
+      
+      // Hide autocomplete on most key presses (except navigation keys)
+      if (showAutocompleteSuggestion && !['Tab', 'Escape', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+        setShowAutocompleteSuggestion(false);
+      }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [showPreview, isFullscreen]);
+  }, [showPreview, isFullscreen, autocompleteSuggestion, showAutocompleteSuggestion, acceptAutocompleteSuggestion, dismissAutocompleteSuggestion, content, triggerAutocomplete]);
 
   const formatPreviewContent = (text: string) => {
     if (!text.trim()) return null;
@@ -157,6 +326,49 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
     }).filter(Boolean);
   };
 
+  // Render autocomplete suggestion overlay
+  const renderAutocompleteSuggestion = () => {
+    if (!autocompleteSuggestion || !showAutocompleteSuggestion || !editorRef.current) return null;
+    
+    const textarea = editorRef.current;
+    const textareaStyle = window.getComputedStyle(textarea);
+    const beforeText = content.substring(0, autocompleteSuggestion.position);
+    const lines = beforeText.split('\n');
+    const currentLine = lines.length - 1;
+    const currentColumn = lines[lines.length - 1].length;
+    
+    // Calculate approximate positioning
+    const lineHeight = parseInt(textareaStyle.lineHeight) || 32;
+    const charWidth = 12; // Approximate character width for the font
+    const paddingLeft = focusMode ? 140 : 120;
+    const paddingTop = focusMode ? 100 : 80;
+    
+    const top = currentLine * lineHeight + paddingTop;
+    const left = currentColumn * charWidth + paddingLeft;
+    
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          top: `${top}px`,
+          left: `${left}px`,
+          fontSize: '20px',
+          fontFamily: '"Crimson Text", Charter, Georgia, serif',
+          lineHeight: '1.8',
+          color: '#9ca3af',
+          opacity: 0.7,
+          pointerEvents: 'none',
+          userSelect: 'none',
+          zIndex: 10,
+          whiteSpace: 'pre',
+          fontStyle: 'italic'
+        }}
+      >
+        {autocompleteSuggestion.text}
+      </div>
+    );
+  };
+  
   const getSaveStatusInfo = () => {
     switch (saveStatus) {
       case 'saving':
@@ -193,6 +405,22 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
       {/* Floating Toolbar - Enhanced */}
       <div className={`absolute top-6 right-6 z-20 transition-all duration-300 ${focusMode ? 'opacity-20 hover:opacity-100' : 'opacity-100'}`}>
         <div className="flex items-center space-x-2 bg-white/95 backdrop-blur-md rounded-xl px-4 py-3 border border-gray-200/60 shadow-lg">
+          {/* Autocomplete Status */}
+          {isLoadingAutocomplete && (
+            <div className="flex items-center space-x-2 px-2 py-1 rounded-lg bg-blue-50/80 text-blue-600">
+              <Loader2 className="w-3 h-3 animate-spin" />
+              <span className="text-xs font-medium">AI thinking...</span>
+            </div>
+          )}
+          
+          {/* Suggestion Ready Status */}
+          {showAutocompleteSuggestion && autocompleteSuggestion && (
+            <div className="flex items-center space-x-2 px-2 py-1 rounded-lg bg-green-50/80 text-green-600">
+              <Sparkles className="w-3 h-3" />
+              <span className="text-xs font-medium">Tab to accept</span>
+            </div>
+          )}
+          
           {/* Save Status */}
           {statusInfo && (
             <div className={`flex items-center space-x-2 px-2 py-1 rounded-lg bg-gray-50/80 ${statusInfo.className}`}>
@@ -202,7 +430,7 @@ export const EditorPanel: React.FC<EditorPanelProps> = ({ projectId }) => {
           )}
           
           {/* Divider */}
-          {statusInfo && <div className="w-px h-4 bg-gray-300"></div>}
+          {(statusInfo || isLoadingAutocomplete || showAutocompleteSuggestion) && <div className="w-px h-4 bg-gray-300"></div>}
 
           {/* Auto-save Toggle */}
           <Button
@@ -293,6 +521,9 @@ Let your imagination flow. Every great story starts with a single word."
             }}
           />
           
+          {/* AI Autocomplete Suggestion Overlay */}
+          {renderAutocompleteSuggestion()}
+          
           {/* Enhanced Word Count */}
           <div className={`absolute bottom-6 left-6 transition-all duration-300 ${focusMode ? 'opacity-30 hover:opacity-100' : 'opacity-100'}`}>
             <div className="bg-white/90 backdrop-blur-sm px-4 py-2 rounded-lg border border-gray-200/60 shadow-sm">
@@ -382,6 +613,18 @@ Let your imagination flow. Every great story starts with a single word."
         </div>
       )}
 
+      {/* Cleanup timeouts and abort controllers on unmount */}
+      {useEffect(() => {
+        return () => {
+          if (autocompleteTimeoutRef.current) {
+            clearTimeout(autocompleteTimeoutRef.current);
+          }
+          if (autocompleteAbortRef.current) {
+            autocompleteAbortRef.current.abort();
+          }
+        };
+      }, [])}
+      
       {/* Keyboard Shortcuts Help (appears on focus) */}
       {focusMode && (
         <div className="absolute bottom-6 right-6 bg-gray-900/95 backdrop-blur-sm text-white px-4 py-3 rounded-lg text-xs shadow-lg border border-gray-700/50">
@@ -397,6 +640,14 @@ Let your imagination flow. Every great story starts with a single word."
             <div className="flex items-center gap-2">
               <kbd className="bg-gray-700/80 text-gray-200 px-1.5 py-0.5 rounded text-xs font-medium border border-gray-600/50">F11</kbd> 
               <span className="text-gray-200">Fullscreen</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="bg-gray-700/80 text-gray-200 px-1.5 py-0.5 rounded text-xs font-medium border border-gray-600/50">Tab</kbd> 
+              <span className="text-gray-200">Accept AI</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <kbd className="bg-gray-700/80 text-gray-200 px-1.5 py-0.5 rounded text-xs font-medium border border-gray-600/50">Ctrl+Space</kbd> 
+              <span className="text-gray-200">AI Suggest</span>
             </div>
           </div>
         </div>

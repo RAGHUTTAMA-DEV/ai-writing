@@ -325,10 +325,60 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       
       Please provide suggestions to modify the selected text based on the user's request. Provide 2-3 different options.`;
       
-      const response = await apiService.generateAutocomplete(prompt, aiAssistant.selectionStart, projectId);
+      const response = await apiService.generateAISuggestions(projectId, prompt, 'fast');
       
-      // Parse response into suggestions (assume response contains multiple options)
-      const suggestions = response.suggestion ? [response.suggestion] : [];
+      // Parse enhanced response with summary, corrections, and suggestions
+      const responseText = response.suggestions || '';
+      
+      // Extract summary
+      const summaryMatch = responseText.match(/SUMMARY:\\s*([\\s\\S]*?)(?=\\n\\nCORRECTED VERSION:|CORRECTED VERSION:|$)/);
+      const summary = summaryMatch ? summaryMatch[1].trim() : '';
+      
+      // Extract corrected version
+      const correctionMatch = responseText.match(/CORRECTED VERSION:\\s*([\\s\\S]*?)(?=\\n\\nSUGGESTIONS:|SUGGESTIONS:|$)/);
+      const correctedText = correctionMatch ? correctionMatch[1].trim() : '';
+      
+      // Extract suggestions section
+      const suggestionsMatch = responseText.match(/SUGGESTIONS:\\s*([\\s\\S]*?)$/);
+      const suggestionsText = suggestionsMatch ? suggestionsMatch[1] : '';
+      
+      // Parse individual suggestions
+      const suggestionLines = suggestionsText.split('\\n').filter(line => 
+        line.match(/^\\d+\./)
+      ).map(line => line.replace(/^\\d+\\.\\s*/, '').trim());
+      
+      const suggestions = [];
+      
+      // Add summary as first item if it exists
+      if (summary) {
+        suggestions.push({
+          type: 'summary',
+          text: summary,
+          label: 'Analysis Summary'
+        });
+      }
+      
+      // Add correction as second item if it exists and is different
+      if (correctedText && 
+          correctedText !== 'No corrections needed' && 
+          correctedText !== aiAssistant.selectedText) {
+        suggestions.push({
+          type: 'correction',
+          text: correctedText,
+          label: 'Apply Correction'
+        });
+      }
+      
+      // Add individual suggestions
+      suggestionLines.forEach((suggestion, index) => {
+        if (suggestion.trim()) {
+          suggestions.push({
+            type: 'suggestion',
+            text: suggestion,
+            label: `Apply Suggestion ${index + 1}`
+          });
+        }
+      });
       
       setAiAssistant(prev => ({ 
         ...prev, 
@@ -341,18 +391,26 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     }
   };
 
-  const applySuggestion = (suggestionText: string) => {
+  const applySuggestion = (suggestion: any) => {
     if (!textareaRef.current) return;
     
+    // Summary is just informational, don't apply to text
+    if (suggestion.type === 'summary') {
+      // Just close the assistant, summary is read-only
+      closeAIAssistant();
+      return;
+    }
+    
+    // For corrections and suggestions, replace the selected text
     const beforeText = content.substring(0, aiAssistant.selectionStart);
     const afterText = content.substring(aiAssistant.selectionEnd);
-    const newContent = beforeText + suggestionText + afterText;
+    const newContent = beforeText + suggestion.text + afterText;
     
     setContent(newContent);
     onChange(newContent);
     
     // Update cursor position
-    const newCursorPos = aiAssistant.selectionStart + suggestionText.length;
+    const newCursorPos = aiAssistant.selectionStart + suggestion.text.length;
     setTimeout(() => {
       if (textareaRef.current) {
         textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
@@ -658,19 +716,55 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
             {aiAssistant.suggestions.length > 0 && (
               <div className="px-6 pb-6">
                 <div className="space-y-3">
-                  <h4 className="font-medium text-gray-900">Suggestions:</h4>
+                  <h4 className="font-medium text-gray-900">AI Suggestions:</h4>
                   {aiAssistant.suggestions.map((suggestion, index) => (
-                    <div key={index} className="border border-gray-200 rounded-xl p-4 hover:border-blue-300 transition-colors group">
+                    <div key={index} className={`border rounded-xl p-4 transition-colors ${
+                      suggestion.type === 'summary' 
+                        ? 'border-blue-200 bg-blue-50/30' 
+                        : suggestion.type === 'correction' 
+                        ? 'border-green-200 bg-green-50/50 hover:border-green-300 group' 
+                        : 'border-gray-200 hover:border-blue-300 group'
+                    }`}>
                       <div className="flex items-start justify-between">
-                        <div className="flex-1 pr-4">
-                          <p className="text-gray-800 leading-relaxed">{suggestion}</p>
+                        <div className={`flex-1 ${suggestion.type === 'summary' ? '' : 'pr-4'}`}>
+                          {suggestion.type === 'summary' && (
+                            <div className="flex items-center space-x-2 mb-3">
+                              <Icon name="info" size="sm" className="text-blue-600" />
+                              <span className="text-sm font-medium text-blue-700">Writing Analysis</span>
+                            </div>
+                          )}
+                          {suggestion.type === 'correction' && (
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Icon name="check-circle" size="sm" className="text-green-600" />
+                              <span className="text-sm font-medium text-green-700">Corrected Version</span>
+                            </div>
+                          )}
+                          {suggestion.type === 'suggestion' && (
+                            <div className="flex items-center space-x-2 mb-2">
+                              <Icon name="lightbulb" size="sm" className="text-amber-600" />
+                              <span className="text-sm font-medium text-amber-700">Writing Suggestion</span>
+                            </div>
+                          )}
+                          <p className={`leading-relaxed ${
+                            suggestion.type === 'summary' 
+                              ? 'text-gray-700 font-medium italic' 
+                              : 'text-gray-800'
+                          }`}>
+                            {suggestion.text}
+                          </p>
                         </div>
-                        <button
-                          onClick={() => applySuggestion(suggestion)}
-                          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium transition-colors opacity-0 group-hover:opacity-100"
-                        >
-                          Apply
-                        </button>
+                        {suggestion.type !== 'summary' && (
+                          <button
+                            onClick={() => applySuggestion(suggestion)}
+                            className={`px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors opacity-0 group-hover:opacity-100 ${
+                              suggestion.type === 'correction'
+                                ? 'bg-green-600 hover:bg-green-700'
+                                : 'bg-blue-600 hover:bg-blue-700'
+                            }`}
+                          >
+                            {suggestion.type === 'correction' ? 'Apply Fix' : 'Apply Suggestion'}
+                          </button>
+                        )}
                       </div>
                     </div>
                   ))}

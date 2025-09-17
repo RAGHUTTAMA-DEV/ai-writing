@@ -37,6 +37,7 @@
 
 export class AIService {
     private model: ChatGoogleGenerativeAI;
+    private fastModel: ChatGoogleGenerativeAI;
   private conversationMemory: Map<string, ConversationMemory> = new Map();
   private writingPatterns: Map<string, any> = new Map();
   private readonly MAX_CONVERSATION_MEMORY_SIZE = 100;
@@ -49,15 +50,25 @@ export class AIService {
       if (!apiKey) {
         console.warn("No API key found for Google Generative AI. AI features will not work.");
         this.model = null as any;
+        this.fastModel = null as any;
         return;
       }
       
       this.model = new ChatGoogleGenerativeAI({
         model: "gemini-2.0-flash",
-        maxOutputTokens: 2048, // Restored for detailed analysis
+        maxOutputTokens: 1024, // Reduced for faster response
         apiKey: apiKey,
-        temperature: 0.7, // Restored for creative responses
-        maxRetries: 1, // Allow one retry for reliability
+        temperature: 0.6, // Slightly lower for more focused responses
+        maxRetries: 1,
+      });
+      
+      // Create a separate fast model for autocomplete with better quality settings
+      this.fastModel = new ChatGoogleGenerativeAI({
+        model: "gemini-2.0-flash",
+        maxOutputTokens: 100, // Increased for better quality responses
+        apiKey: apiKey,
+        temperature: 0.7, // Higher temperature for more creative and natural suggestions
+        maxRetries: 0, // No retries for speed
       });
     }
 
@@ -72,109 +83,116 @@ export class AIService {
       return Promise.race([promise, timeoutPromise]);
     }
 
-    // Generate autocomplete suggestions (Copilot-like feature) with caching
+    // Generate fast autocomplete suggestions (NO vector search, NO complex analysis)
     async generateAutocomplete(
       beforeCursor: string,
       afterCursor: string,
       projectId?: string
     ): Promise<string> {
       try {
-        if (!this.model) {
+        if (!this.fastModel) {
+          return '';
+        }
+        
+        // Safety check: Only autocomplete actual writing content, not AI prompts
+        const lowerBefore = beforeCursor.toLowerCase();
+        const aiPromptIndicators = [
+          'selected text:', 'user request:', 'provide suggestions', 'please provide',
+          'different options', 'context:', 'suggestions:', 'analyze this',
+          'fix spelling', 'grammar', 'rewrite this', 'improve this'
+        ];
+        
+        if (aiPromptIndicators.some(indicator => lowerBefore.includes(indicator))) {
+          console.log('🚫 Skipping autocomplete for AI prompt/instruction text');
+          return ''; // Don't autocomplete AI prompts
+        }
+        
+        // Also skip if it looks like structured text (lots of quotes and colons)
+        const quoteCount = (beforeCursor.match(/"/g) || []).length;
+        const colonCount = (beforeCursor.match(/:/g) || []).length;
+        if (quoteCount > 2 && colonCount > 2) {
+          console.log('🚫 Skipping autocomplete for structured/prompt text');
           return '';
         }
 
-        // Get the last few sentences for context (limit for performance)
-        const contextLength = Math.min(beforeCursor.length, 300); // Reduced from 500
+        // Get more context for better quality suggestions (but still fast)
+        const contextLength = Math.min(beforeCursor.length, 300);
         const context = beforeCursor.slice(-contextLength);
         
-        // Create cache key for autocomplete
-        const cacheKey = CacheKeys.aiResponse(
-          `autocomplete:${context}:${afterCursor?.slice(0, 50) || ''}:${projectId || 'none'}`,
-          'gemini-2.0-flash'
-        );
+        // Simple cache key based on just the context (no timestamp for better caching)
+        const cacheKey = `fastautocomplete:${context.slice(-50)}`;
         
-        // Try to get cached result first
+        // Try to get cached result first (shorter cache time)
         const cachedSuggestion = aiResponseCache.get<string>(cacheKey);
         if (cachedSuggestion) {
-          console.log('🎯 Returning cached autocomplete suggestion');
           return cachedSuggestion;
         }
         
-        console.log('🔄 Generating new autocomplete suggestion...');
+        // Super simple and fast autocomplete generation
+        const suggestion = await this.generateFastAutocompleteSuggestion(context, afterCursor);
         
-        // Get project context from cache or generate
-        const projectContext = projectId ? await this.getCachedProjectContext(projectId) : null;
-        
-        // Limit RAG search for performance (only 1 result for autocomplete)
-        const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch(context, {
-          projectId,
-          limit: 1,
-          includeContext: false // Reduce overhead
-        }) : null;
-        const relevantChunks = ragResults?.results || [];
-        
-        // Quick analysis for autocomplete (simplified)
-        const analysis = this.analyzeWritingQuick(beforeCursor);
-        
-        const suggestion = await this.generateAutocompleteSuggestion(
-          context, afterCursor, projectContext, relevantChunks, analysis
-        );
-        
-        // Cache the result for 5 minutes
-        aiResponseCache.set(cacheKey, suggestion, 300);
+        // Cache for 3 minutes for good balance of freshness and performance
+        aiResponseCache.set(cacheKey, suggestion, 180);
         
         return suggestion;
       } catch (error) {
-        console.error('Error generating autocomplete:', error);
+        console.error('Error generating fast autocomplete:', error);
         return '';
       }
     }
     
-    // Internal method for generating autocomplete suggestions
-    private async generateAutocompleteSuggestion(
+    // Super fast and simple autocomplete suggestion method
+    private async generateFastAutocompleteSuggestion(
       context: string,
-      afterCursor: string,
-      projectContext: ProjectContext | null,
-      relevantChunks: any[],
-      analysis: any
+      afterCursor: string
     ): Promise<string> {
-      // Get the last few words to understand what we're continuing
-      const contextWords = context.trim().split(/\s+/);
-      const lastWords = contextWords.slice(-5).join(' '); // Last 5 words for context
-      
-      const prompt = `Complete this text with 1-5 words only. Just continue naturally:
+      try {
+        // Get more context words for better quality suggestions
+        const contextWords = context.trim().split(/\s+/);
+        const lastWords = contextWords.slice(-15).join(' '); // Use last 15 words for better context
+        
+        // Better prompt for quality autocomplete suggestions
+        const prompt = `You are a creative writing assistant. Continue this text naturally and smoothly.
 
-Text ending: "${lastWords}"
-${afterCursor ? `What comes next: "${afterCursor.slice(0, 30)}..."\n` : ''}
+Text: "${lastWords}"
 
-Provide ONLY the next few words (maximum 5 words). Do not repeat the text. Do not add quotes or explanations.
+Continue with the most natural next 2-4 words that would flow perfectly. Only provide the continuation words, nothing else:`;
 
-Continuation:`;
-
-      const response = await trackAICall(
-        () => this.callWithTimeout(this.model!.invoke(prompt), 'Autocomplete Generation'),
-        'Autocomplete Generation'
-      );
-      let suggestion = (response.content as string).trim();
-      
-      // Clean up the suggestion very aggressively for autocomplete
-      suggestion = suggestion.replace(/^["'`]|["'`]$/g, ''); // Remove quotes
-      suggestion = suggestion.replace(/^(continuation:|complete:|next:)/i, '').trim(); // Remove instruction words
-      suggestion = suggestion.split('\n')[0]; // First line only
-      suggestion = suggestion.split('.')[0]; // Don't include full sentences
-      
-      // Ensure it's short (max 5 words for autocomplete)
-      const words = suggestion.trim().split(/\s+/);
-      if (words.length > 5) {
-        suggestion = words.slice(0, 5).join(' ');
-      }
-      
-      // Don't return anything if it's too long or contains the original text
-      if (suggestion.length > 30 || suggestion.includes(lastWords)) {
+        // Fast AI call using optimized fast model with reasonable timeout for quality
+        const response = await Promise.race([
+          this.fastModel!.invoke(prompt),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000)) // 5 second max for balance of speed and quality
+        ]) as any;
+        
+        let suggestion = (response.content as string).trim();
+        
+        // Better cleanup for quality suggestions
+        suggestion = suggestion.replace(/^["'`]|["'`]$/g, '').trim();
+        suggestion = suggestion.replace(/^(next words:|continue:|continuation:|text:|words:)/i, '').trim();
+        suggestion = suggestion.split('\n')[0]; // Take first line only
+        
+        // Don't cut off mid-sentence, but limit to reasonable length
+        const words = suggestion.trim().split(/\s+/);
+        if (words.length > 6) {
+          suggestion = words.slice(0, 6).join(' ');
+        }
+        
+        // Better validation - allow longer, more meaningful suggestions
+        if (suggestion.length > 40 || suggestion.length < 2) {
+          return '';
+        }
+        
+        // Don't return if it just repeats the last word
+        const lastWord = lastWords.trim().split(' ').pop()?.toLowerCase();
+        if (lastWord && suggestion.toLowerCase().startsWith(lastWord)) {
+          return '';
+        }
+        
+        return suggestion;
+      } catch (error) {
+        // If anything fails, return empty string fast
         return '';
       }
-      
-      return suggestion;
     }
     
     // Quick analysis for autocomplete (performance optimized)
@@ -232,62 +250,91 @@ Continuation:`;
         return cachedSuggestion;
       }
 
-      // HYBRID ANALYSIS MODE: Fast vs Deep
+      // FAST MODE: Skip complex processing for speed
+      if (analysisMode === 'fast') {
+        console.log(`⚡ ULTRA-FAST MODE: Direct AI suggestion without RAG search`);
+        
+        // Enhanced prompt for high-quality writing assistance
+        const prompt = `You are an expert writing coach and literary editor. Analyze this text comprehensively:
+
+"${context.slice(-300)}"
+
+Provide a thorough analysis with immediate fixes and creative improvements.
+
+Format your response EXACTLY like this:
+
+SUMMARY:
+[Brief analysis of the text's strengths, weaknesses, tone, and style - 2-3 sentences]
+
+CORRECTED VERSION:
+[Provide corrected text with spelling/grammar fixes, or "No corrections needed"]
+
+SUGGESTIONS:
+1. [Specific improvement for style, flow, or clarity]
+2. [Character development or plot enhancement suggestion]
+3. [Dialogue, description, or pacing improvement]
+4. [Theme, mood, or literary technique suggestion]
+
+SUMMARY:`;
+        
+        console.log(`🤖 Invoking AI model for HIGH-QUALITY suggestions...`);
+        const response = await Promise.race([
+          this.model!.invoke(prompt),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Quality timeout')), 15000)) // 15 second max for quality results
+        ]) as any;
+        
+        const suggestions = response.content as string;
+        console.log(`✅ FAST AI suggestions generated`);
+        
+        // No caching for fast mode - always fresh results
+        return suggestions;
+      }
+      
+      // DEEP MODE: Full complex processing
+      console.log(`🔍 DEEP MODE: Using full analysis...`);
       let relevantChunks: any[] = [];
       let projectFullContent = '';
       
-      console.log(`📋 Getting project data for ${analysisMode} analysis...`);
-      
-      // 1. Get project context and stats (always needed)
+      // Get project context and stats (only for deep mode)
       const projectContext = await improvedRAGService.syncProjectContext(projectId);
       const projectStats = await improvedRAGService.getProjectStats(projectId);
-      console.log(`📋 Project context retrieved:`, projectContext ? 'Found' : 'Not found');
-      console.log(`📊 Project stats: ${projectStats.characters.length} characters, ${projectStats.themes.length} themes`);
       
-      // 2. Get actual project content for richer AI context
+      // Get project content
       try {
         const project = await prisma.project.findUnique({
           where: { id: projectId },
           select: { content: true, title: true, description: true }
         });
-        
         if (project?.content) {
           projectFullContent = project.content;
-          console.log(`📜 Retrieved full project content: ${projectFullContent.length} characters`);
         }
       } catch (error) {
-        console.log(`⚠️ Could not retrieve full project content:`, error);
+        console.log(`⚠️ Could not retrieve project content`);
       }
       
-      // 3. Mode-specific analysis
-      if (analysisMode === 'deep') {
-        console.log(`🔍 DEEP MODE: Using embedding-based RAG search for detailed analysis...`);
-        try {
-          const ragResults = await improvedRAGService.intelligentSearch(context, {
-            projectId,
-            limit: 5, // More chunks for deep analysis
-            includeContext: true
-          });
-          relevantChunks = ragResults.results || [];
-          console.log(`🔍 Deep search found ${relevantChunks.length} relevant chunks`);
-        } catch (ragError) {
-          console.log(`⚠️ Deep search failed, falling back to fast mode`);
-        }
-      } else {
-        console.log(`⚡ FAST MODE: Using direct project context (no embedding search)`);
+      // RAG search for deep mode
+      try {
+        const ragResults = await improvedRAGService.intelligentSearch(context, {
+          projectId,
+          limit: 5,
+          includeContext: true
+        });
+        relevantChunks = ragResults.results || [];
+      } catch (ragError) {
+        console.log(`⚠️ RAG search failed`);
       }
       
-      // 4. Get conversation memory and text analysis
+      // Get conversation memory and analysis
       const memory = userId ? await this.getConversationMemory(userId, projectId) : null;
       const analysis = this.analyzeWritingOptimized(context);
       
-      // 5. Build comprehensive context-aware prompt
+      // Build comprehensive prompt for deep mode
       const prompt = this.buildEnhancedPrompt({
         context,
         projectId,
         projectContext,
         projectStats,
-        projectFullContent: projectFullContent.slice(0, 3000), // First 3000 chars for context
+        projectFullContent: projectFullContent.slice(0, 3000),
         relevantChunks,
         memory,
         analysis,
@@ -855,12 +902,9 @@ Please provide a comprehensive foreshadowing analysis with the following structu
         }
         
         console.log(`📝 Text analysis for motivation in ${analysisMode} mode`);
-        
-        // Character analysis
-        const characterExistsInProject = projectStats.characters.includes(character);
+                const characterExistsInProject = projectStats.characters.includes(character);
         const characterAppearsInText = text.toLowerCase().includes(character.toLowerCase());
         
-        // Build enhanced motivation analysis prompt with rich context
         const analysis = this.analyzeWriting(text);
         const basePrompt = this.buildEnhancedPrompt({
           context: text,
@@ -869,7 +913,7 @@ Please provide a comprehensive foreshadowing analysis with the following structu
           projectStats,
           projectFullContent,
           relevantChunks,
-          memory: null, // Motivation analysis doesn't need conversation memory
+          memory: null,
           analysis,
           analysisMode,
           requestType: `character motivation and stakes analysis for "${character}"`
