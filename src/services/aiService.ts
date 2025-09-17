@@ -203,107 +203,124 @@ Continuation:`;
       );
     }
 
-    // Enhanced suggestion generation with project context and conversation memory (with caching)
-    async generateSuggestions(
-      context: string,
-      projectId: string,
-      userId?: string
-    ): Promise<string> {
+  // Enhanced suggestion generation with project context and conversation memory (with caching)
+  // HYBRID MODE: Supports both fast (text-based) and deep (embedding-based) analysis
+  async generateSuggestions(
+    context: string,
+    projectId: string,
+    userId?: string,
+    analysisMode: 'fast' | 'deep' = 'fast'
+  ): Promise<string> {
+    try {
+      if (!this.model) {
+        return 'AI features are not available due to missing API key configuration.';
+      }
+
+      console.log(`🎯 Generating suggestions for project: ${projectId} (${analysisMode} mode)`);
+      
+      // Create cache key for suggestions (include analysis mode)
+      const contextHash = context.slice(0, 200); // Use first 200 chars for cache key
+      const cacheKey = CacheKeys.aiResponse(
+        `suggestions:${analysisMode}:${contextHash}:${projectId}:${userId || 'anon'}`,
+        'gemini-2.0-flash'
+      );
+      
+      // Check cache first (shorter TTL for suggestions as they should be more dynamic)
+      const cachedSuggestion = aiResponseCache.get<string>(cacheKey);
+      if (cachedSuggestion) {
+        console.log(`🎯 Returning cached suggestions (${analysisMode} mode)`);
+        return cachedSuggestion;
+      }
+
+      // HYBRID ANALYSIS MODE: Fast vs Deep
+      let relevantChunks: any[] = [];
+      let projectFullContent = '';
+      
+      console.log(`📋 Getting project data for ${analysisMode} analysis...`);
+      
+      // 1. Get project context and stats (always needed)
+      const projectContext = await improvedRAGService.syncProjectContext(projectId);
+      const projectStats = await improvedRAGService.getProjectStats(projectId);
+      console.log(`📋 Project context retrieved:`, projectContext ? 'Found' : 'Not found');
+      console.log(`📊 Project stats: ${projectStats.characters.length} characters, ${projectStats.themes.length} themes`);
+      
+      // 2. Get actual project content for richer AI context
       try {
-        if (!this.model) {
-          return 'AI features are not available due to missing API key configuration.';
+        const project = await prisma.project.findUnique({
+          where: { id: projectId },
+          select: { content: true, title: true, description: true }
+        });
+        
+        if (project?.content) {
+          projectFullContent = project.content;
+          console.log(`📜 Retrieved full project content: ${projectFullContent.length} characters`);
         }
-
-        console.log(`🎯 Generating suggestions for project: ${projectId}`);
-        
-        // Create cache key for suggestions (less aggressive caching than autocomplete)
-        const contextHash = context.slice(0, 200); // Use first 200 chars for cache key
-        const cacheKey = CacheKeys.aiResponse(
-          `suggestions:${contextHash}:${projectId}:${userId || 'anon'}`,
-          'gemini-2.0-flash'
-        );
-        
-        // Check cache first (shorter TTL for suggestions as they should be more dynamic)
-        const cachedSuggestion = aiResponseCache.get<string>(cacheKey);
-        if (cachedSuggestion) {
-          console.log('🎯 Returning cached suggestions');
-          return cachedSuggestion;
-        }
-
-        // Get project context from cache
-        const projectContext = await this.getCachedProjectContext(projectId);
-        console.log(`📋 Project context retrieved:`, projectContext ? 'Found' : 'Not found');
-        
-        // Try to get relevant chunks from RAG with reduced overhead
-        let relevantChunks: any[] = [];
-        let projectStats: any = { totalChunks: 0, characters: [], themes: [], contentTypes: [] };
-        
+      } catch (error) {
+        console.log(`⚠️ Could not retrieve full project content:`, error);
+      }
+      
+      // 3. Mode-specific analysis
+      if (analysisMode === 'deep') {
+        console.log(`🔍 DEEP MODE: Using embedding-based RAG search for detailed analysis...`);
         try {
-          // Reduce RAG search limit for better performance
           const ragResults = await improvedRAGService.intelligentSearch(context, {
             projectId,
-            limit: 3, // Reduced from 5
-            includeContext: false // Reduce overhead
+            limit: 5, // More chunks for deep analysis
+            includeContext: true
           });
           relevantChunks = ragResults.results || [];
-          
-          // Get project stats from cache
-          const statsCacheKey = CacheKeys.projectStats(projectId);
-          projectStats = await projectCache.getOrSet(
-            statsCacheKey,
-            () => improvedRAGService.getProjectStats(projectId),
-            900 // 15 minutes cache for stats
-          );
-          
-          console.log(`🔍 RAG search found ${relevantChunks.length} relevant chunks`);
+          console.log(`🔍 Deep search found ${relevantChunks.length} relevant chunks`);
         } catch (ragError) {
-          console.log(`⚠️ RAG search failed, proceeding with project context only`);
+          console.log(`⚠️ Deep search failed, falling back to fast mode`);
         }
-        
-        // Get conversation memory for personalization (with size limit for performance)
-        const memory = userId ? await this.getConversationMemory(userId, projectId) : null;
-        
-        // Use optimized analysis for better performance
-        const analysis = this.analyzeWritingOptimized(context);
-        
-        // Build optimized context-aware prompt
-        const prompt = this.buildOptimizedPrompt({
-          context,
-          projectId,
-          projectContext,
-          relevantChunks,
-          projectStats,
-          memory,
-          analysis,
-          requestType: 'suggestions'
-        });
-
-        console.log(`🤖 Invoking AI model for suggestions...`);
-        const response = await trackAICall(
-          () => this.callWithTimeout(this.model!.invoke(prompt), 'Suggestions Generation'),
-          'Suggestions Generation'
-        );
-        const suggestions = response.content as string;
-        
-        console.log(`✅ AI suggestions generated successfully`);
-        
-        // Cache the result for 10 minutes (shorter than autocomplete)
-        aiResponseCache.set(cacheKey, suggestions, 600);
-        
-        // Store in conversation memory (async to not block response)
-        if (userId) {
-          setImmediate(async () => {
-            await this.updateConversationMemory(userId, projectId, 'user', context.slice(0, 500));
-            await this.updateConversationMemory(userId, projectId, 'assistant', suggestions.slice(0, 500));
-          });
-        }
-        
-        return suggestions;
-      } catch (error) {
-        console.error('❌ Error generating suggestions:', error);
-        return 'I encountered an error while generating suggestions. Please try again later.';
+      } else {
+        console.log(`⚡ FAST MODE: Using direct project context (no embedding search)`);
       }
+      
+      // 4. Get conversation memory and text analysis
+      const memory = userId ? await this.getConversationMemory(userId, projectId) : null;
+      const analysis = this.analyzeWritingOptimized(context);
+      
+      // 5. Build comprehensive context-aware prompt
+      const prompt = this.buildEnhancedPrompt({
+        context,
+        projectId,
+        projectContext,
+        projectStats,
+        projectFullContent: projectFullContent.slice(0, 3000), // First 3000 chars for context
+        relevantChunks,
+        memory,
+        analysis,
+        analysisMode,
+        requestType: 'suggestions'
+      });
+
+      console.log(`🤖 Invoking AI model for suggestions...`);
+      const response = await trackAICall(
+        () => this.callWithTimeout(this.model!.invoke(prompt), 'Suggestions Generation'),
+        'Suggestions Generation'
+      );
+      const suggestions = response.content as string;
+      
+      console.log(`✅ AI suggestions generated successfully (fast path)`);
+      
+      // Cache the result for 10 minutes (shorter than autocomplete)
+      aiResponseCache.set(cacheKey, suggestions, 600);
+      
+      // Store in conversation memory (async to not block response)
+      if (userId) {
+        setImmediate(async () => {
+          await this.updateConversationMemory(userId, projectId, 'user', context.slice(0, 500));
+          await this.updateConversationMemory(userId, projectId, 'assistant', suggestions.slice(0, 500));
+        });
+      }
+      
+      return suggestions;
+    } catch (error) {
+      console.error('❌ Error generating suggestions:', error);
+      return 'I encountered an error while generating suggestions. Please try again later.';
     }
+  }
 
   // Optimized writing analysis for performance
     analyzeWritingOptimized(text: string): WritingAnalysis {
@@ -611,22 +628,32 @@ Provide specific, implementable advice that will help the writer create more eng
   }
 
   // Advanced foreshadowing analysis with deep storytelling insights
+  // OPTIMIZED: Removed embedding-based RAG search to avoid Google API quota and improve speed
   async checkForeshadowing(text: string, context: string, projectId?: string): Promise<string> {
     if (!this.model) {
       return 'AI features are not available due to missing API key configuration.';
     }
     
     try {
-      // OPTIMIZED RAG for speed - limit operations but keep functionality
-      const projectContext = projectId ? await this.getCachedProjectContext(projectId) : null;
-      const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch('plot future events character development', {
-        projectId,
-        limit: 2, // Reduced from 6 to 2
-        contentTypes: ['plot', 'narrative', 'character'],
-        includeContext: false // Skip context for speed
-      }) : null;
-      const relevantChunks = ragResults?.results || [];
+      console.log(`🔮 Analyzing foreshadowing for project: ${projectId} (fast text-based approach)`);
+      
+      // Direct project context access (similar to addProjectToRAG approach)
+      const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
+      console.log(`📋 Project context retrieved directly:`, projectContext ? 'Found' : 'Not found');
+      
+      // Get project stats directly (no embedding searches needed)
+      const projectStats = projectId ? await improvedRAGService.getProjectStats(projectId) : {
+        characters: [] as string[], 
+        themes: [] as string[], 
+        plotElements: [] as string[], 
+        totalChunks: 0
+      };
+      console.log(`📊 Project stats retrieved: ${projectStats.characters.length} characters, ${projectStats.plotElements.length} plot elements`);
+      
       const analysis = this.analyzeWriting(text);
+      console.log(`📝 Text analysis complete without embeddings`);
+      
+      // No RAG chunk search - use direct project context instead
       
       // DETAILED FORESHADOWING ANALYSIS
       const prompt = `
@@ -638,15 +665,25 @@ Provide specific, implementable advice that will help the writer create more eng
         - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
         - Themes: ${projectContext.themes?.join(', ') || 'None identified'}
         - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
+        - Plot Points: ${projectContext.plotPoints?.join(', ') || 'None identified'}
+        - Writing Style: ${projectContext.writingStyle || 'Not specified'}
         ` : ''}
+        
+        PROJECT STATISTICS:
+        - Total Characters: ${projectStats.characters.length} (${projectStats.characters.slice(0, 5).join(', ')}${projectStats.characters.length > 5 ? '...' : ''})
+        - Themes: ${projectStats.themes.slice(0, 3).join(', ')}${projectStats.themes.length > 3 ? '...' : ''}
+        - Plot Elements: ${projectStats.plotElements.slice(0, 3).join(', ')}${projectStats.plotElements.length > 3 ? '...' : ''}
+        
+        CURRENT WRITING ANALYSIS:
+        - Word Count: ${analysis.wordCount}
+        - Tone: ${analysis.tone}
+        - Pacing: ${analysis.pacing}
+        - Detected Characters: ${analysis.characters.join(', ') || 'None detected'}
+        - Detected Themes: ${analysis.themes.join(', ') || 'None detected'}
+        - Plot Points: ${analysis.plotPoints.join(', ') || 'None detected'}
         
         TEXT TO ANALYZE:
         "${text}"
-        
-        ${relevantChunks.length > 0 ? `
-        RELEVANT PROJECT CONTEXT:
-        ${relevantChunks.map((chunk, i) => `${i + 1}. ${chunk.pageContent.slice(0, 300)}...`).join('\n')}
-        ` : ''}
         
         Please provide a comprehensive foreshadowing analysis with the following structure:
         
@@ -684,22 +721,30 @@ Provide specific, implementable advice that will help the writer create more eng
   }
 
     // Enhanced character motivation and stakes evaluation
+    // OPTIMIZED: Removed embedding-based RAG search to avoid Google API quota and improve speed
     async evaluateMotivationAndStakes(text: string, character: string, projectId?: string): Promise<string> {
       if (!this.model) {
         return 'AI features are not available due to missing API key configuration.';
       }
       
       try {
-        // OPTIMIZED RAG for speed
-        const projectContext = projectId ? await this.getCachedProjectContext(projectId) : null;
-        const ragResults = projectId && projectContext ? await improvedRAGService.intelligentSearch(`${character} motivation goals`, {
-          projectId,
-          limit: 1, // Reduced from 4 to 1
-          characters: [character],
-          contentTypes: ['character'],
-          includeContext: false
-        }) : null;
-        const characterChunks = ragResults?.results || [];
+        console.log(`🎭 Analyzing motivation for character: ${character} in project: ${projectId} (fast text-based approach)`);
+        
+        // Direct project context access (similar to addProjectToRAG approach)
+        const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
+        console.log(`📋 Project context retrieved directly:`, projectContext ? 'Found' : 'Not found');
+        
+        // Get project stats directly (no embedding searches needed)
+        const projectStats = projectId ? await improvedRAGService.getProjectStats(projectId) : {
+          characters: [] as string[], 
+          themes: [] as string[], 
+          plotElements: [] as string[], 
+          totalChunks: 0
+        };
+        console.log(`📊 Project stats retrieved: ${projectStats.characters.length} characters`);
+        console.log(`📝 Text analysis for motivation without embeddings`);
+        
+        // No RAG chunk search - use direct project context instead
         
         // DETAILED MOTIVATION ANALYSIS
         const prompt = `
@@ -711,17 +756,23 @@ Provide specific, implementable advice that will help the writer create more eng
           - Known Characters: ${projectContext.characters?.join(', ') || 'None identified'}
           - Themes: ${projectContext.themes?.join(', ') || 'None identified'}
           - Settings: ${projectContext.settings?.join(', ') || 'None identified'}
+          - Plot Points: ${projectContext.plotPoints?.join(', ') || 'None identified'}
+          - Writing Style: ${projectContext.writingStyle || 'Not specified'}
           ` : ''}
           
           CHARACTER TO ANALYZE: "${character}"
           
+          PROJECT STATISTICS:
+          - All Characters in Project: ${projectStats.characters.join(', ') || 'None identified'}
+          - Main Themes: ${projectStats.themes.slice(0, 5).join(', ')}
+          - Plot Elements: ${projectStats.plotElements.slice(0, 5).join(', ')}
+          
           TEXT TO ANALYZE:
           "${text}"
           
-          ${characterChunks.length > 0 ? `
-          PREVIOUS CHARACTER DEVELOPMENT:
-          ${characterChunks.map((chunk, i) => `${i + 1}. ${chunk.pageContent.slice(0, 200)}...`).join('\n')}
-          ` : ''}
+          CHARACTER ANALYSIS FOR "${character}":
+          - Is this character known in the project context? ${projectStats.characters.includes(character) ? 'Yes' : 'No'}
+          - Character appears in current text: ${text.toLowerCase().includes(character.toLowerCase()) ? 'Yes' : 'No'}
           
           Please provide a comprehensive character analysis with this structure:
           
