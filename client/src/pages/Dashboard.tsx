@@ -125,7 +125,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
   };
 
   return (
-    <div className="h-screen flex bg-gray-50">
+    <div className="min-h-screen flex bg-gray-50">
       {/* Sidebar Navigation */}
       <div className="w-20 lg:w-64 bg-white border-r border-gray-200 flex flex-col">
         {/* Logo/Brand Area */}
@@ -206,8 +206,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Content */}
-        <main className="flex-1 overflow-hidden">
-          <div className="h-full">
+        <main className="flex-1">
+          <div className="w-full">
             {renderContent()}
           </div>
         </main>

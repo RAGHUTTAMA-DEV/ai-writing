@@ -8,6 +8,7 @@ import { Label } from '../ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { Badge } from '../ui/badge';
 import { Icon, LoadingIcon } from '../ui/icon';
+import { AILoadingState } from '../ui/performance-monitor';
 
 interface AIToolsPanelProps {
   projectId: string;
@@ -26,7 +27,8 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
     checkForeshadowing,
     evaluateMotivationAndStakes,
     clearSuggestions,
-    clearError
+    clearError,
+    resetLoadingState
   } = useAIStore();
 
   const { activeProject } = useProjectStore();
@@ -35,8 +37,14 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
   const [characterInput, setCharacterInput] = useState('');
 
   const handleGenerateSuggestions = async () => {
+    if (!activeProject?.content || activeProject.content.length < 50) {
+      alert('Please write at least a few sentences before generating suggestions.');
+      return;
+    }
     try {
-      await generateSuggestions(projectId, 'Generate writing suggestions for this project');
+      // Use actual project content for better suggestions
+      const context = `Project: ${activeProject.title}\n\nContent: ${activeProject.content.slice(-500)}`; // Last 500 chars for context
+      await generateSuggestions(projectId, context);
     } catch (error) {
       console.error('Failed to generate suggestions:', error);
     }
@@ -240,7 +248,11 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
   };
 
   return (
-    <div className="space-y-4 animate-fade-in">
+    <>
+      {/* Performance Monitors for different operations */}
+      <AILoadingState operation="suggestions" isActive={aiLoading} />
+      
+      <div className="space-y-4 animate-fade-in p-4">
       {aiError && (
         <div className="bg-destructive/10 border border-destructive/20 rounded-lg p-3 flex items-start space-x-2 animate-slide-up">
           <Icon name="alert-circle" variant="danger" size="sm" className="mt-0.5" />
@@ -294,15 +306,34 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
                   disabled={aiLoading}
                   variant="gradient"
                   size="sm"
-                  className="flex items-center space-x-1.5 h-8 px-3"
+                  className="flex items-center space-x-1.5 h-8 px-3 animate-pulse-on-hover relative overflow-hidden"
                 >
-                  {aiLoading ? (
-                    <LoadingIcon size="xs" className="text-white" />
-                  ) : (
-                    <Icon name="sparkles" size="xs" className="text-white" />
+                  {aiLoading && (
+                    <div className="absolute inset-0 bg-gradient-to-r from-blue-600 via-purple-600 to-blue-600 bg-[length:200%_100%] animate-gradient-x"></div>
                   )}
-                  <span className="text-xs">{aiLoading ? 'Generating...' : 'Generate'}</span>
+                  <div className="relative z-10 flex items-center space-x-1.5">
+                    {aiLoading ? (
+                      <LoadingIcon size="xs" className="text-white animate-spin" />
+                    ) : (
+                      <Icon name="sparkles" size="xs" className="text-white" />
+                    )}
+                    <span className="text-xs font-medium">
+                      {aiLoading ? 'Generating AI Suggestions...' : 'Get AI Suggestions'}
+                    </span>
+                  </div>
                 </Button>
+                {/* Debug: Reset button if stuck */}
+                {aiLoading && (
+                  <Button
+                    onClick={resetLoadingState}
+                    variant="outline"
+                    size="sm"
+                    className="h-8 px-2 ml-2"
+                    title="Reset if stuck"
+                  >
+                    <Icon name="refresh-cw" size="xs" />
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent className="pt-0">
@@ -462,6 +493,7 @@ export const AIToolsPanel: React.FC<AIToolsPanelProps> = ({ projectId }) => {
           </Card>
         </TabsContent>
       </Tabs>
-    </div>
+      </div>
+    </>
   );
 };

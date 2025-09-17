@@ -184,7 +184,10 @@ class APIService {
     
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}));
-      throw new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      const error = new Error(errorData.message || `HTTP error! status: ${response.status}`);
+      // Add response status for better error handling
+      (error as any).status = response.status;
+      throw error;
     }
     
     return response.json();
@@ -259,10 +262,11 @@ class APIService {
     });
   }
 
-  async generateAutocomplete(text: string, cursorPosition: number, projectId?: string): Promise<{ suggestion: string; cursorPosition: number }> {
+  async generateAutocomplete(text: string, cursorPosition: number, projectId?: string, signal?: AbortSignal): Promise<{ suggestion: string; cursorPosition: number }> {
     return this.request<{ suggestion: string; cursorPosition: number }>('/ai/autocomplete', {
       method: 'POST',
       body: JSON.stringify({ text, cursorPosition, projectId }),
+      signal, // Add abort signal support
     });
   }
 

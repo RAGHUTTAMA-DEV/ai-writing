@@ -25,6 +25,7 @@ interface AIState {
   searchRAG: (query: string, projectId?: string, limit?: number) => Promise<void>;
   clearSuggestions: () => void;
   clearError: () => void;
+  resetLoadingState: () => void;
 }
 
 export const useAIStore = create<AIState>()(
@@ -42,7 +43,19 @@ export const useAIStore = create<AIState>()(
       generateSuggestions: async (projectId: string, context: string) => {
         try {
           set({ loading: true, error: null });
+          
+          // Add timeout to prevent stuck loading state
+          const timeoutId = setTimeout(() => {
+            console.warn('AI suggestions request timed out');
+            set({ 
+              loading: false, 
+              error: 'Request timed out. Please try again.'
+            });
+          }, 30000); // 30 second timeout
+          
           const response = await apiService.generateAISuggestions(projectId, context);
+          clearTimeout(timeoutId);
+          
           set(state => ({
             suggestions: [...state.suggestions, response.suggestions],
             loading: false
@@ -150,10 +163,34 @@ export const useAIStore = create<AIState>()(
 
       clearError: () => {
         set({ error: null });
+      },
+
+      resetLoadingState: () => {
+        set({ loading: false, error: null });
       }
     }),
     {
-      name: 'ai-storage'
+      name: 'ai-storage',
+      partialize: (state) => ({
+        suggestions: state.suggestions,
+        themeAnalysis: state.themeAnalysis,
+        foreshadowing: state.foreshadowing,
+        motivationStakes: state.motivationStakes,
+        ragResults: state.ragResults,
+        ragSummary: state.ragSummary,
+        // Don't persist loading and error states
+        // loading: state.loading,
+        // error: state.error,
+      }),
+      onRehydrateStorage: () => {
+        return (state) => {
+          // Always reset loading and error states on rehydration
+          if (state) {
+            state.loading = false;
+            state.error = null;
+          }
+        };
+      }
     }
   )
 );

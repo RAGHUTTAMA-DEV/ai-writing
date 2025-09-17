@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Icon, LoadingIcon } from "@/components/ui/icon";
+import { AILoadingState } from "@/components/ui/performance-monitor";
 import apiService from '../services/api';
 
 interface CopilotEditorProps {
@@ -69,15 +70,69 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
   }, [isTyping, isLoadingSuggestion, showSuggestion, isSaving]);
 
   // Removed hard-coded spelling corrections - now handled by AI assistant
-  // Debounced autocomplete function  
+  // Cache for suggestions to avoid repeated API calls
+  const suggestionCache = useRef<Map<string, { suggestion: string; timestamp: number }>>(new Map());
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Optimized debounced autocomplete function with caching and cancellation
   const debouncedAutocomplete = useCallback(async (text: string, cursorPos: number) => {
     if (text.length < 10 || !projectId) return;
     
+    // Cancel any ongoing request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+    
+    // Create cache key based on context around cursor
+    const contextStart = Math.max(0, cursorPos - 50);
+    const contextEnd = Math.min(text.length, cursorPos + 20);
+    const context = text.slice(contextStart, contextEnd);
+    const cacheKey = `${context}_${cursorPos}`;
+    
+    // Check cache first (valid for 5 minutes)
+    const cached = suggestionCache.current.get(cacheKey);
+    const now = Date.now();
+    if (cached && (now - cached.timestamp) < 5 * 60 * 1000) {
+      setSuggestion({
+        text: cached.suggestion,
+        position: cursorPos,
+        type: 'autocomplete'
+      });
+      setShowSuggestion(true);
+      return;
+    }
+    
     try {
       setIsLoadingSuggestion(true);
-      const response = await apiService.generateAutocomplete(text, cursorPos, projectId);
+      
+      // Create new abort controller
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+      
+      const response = await apiService.generateAutocomplete(text, cursorPos, projectId, abortController.signal);
+      
+      // Check if request was aborted
+      if (abortController.signal.aborted) {
+        return;
+      }
       
       if (response.suggestion && response.suggestion.trim()) {
+        // Cache the result
+        suggestionCache.current.set(cacheKey, {
+          suggestion: response.suggestion,
+          timestamp: now
+        });
+        
+        // Clean old cache entries (keep only last 20)
+        if (suggestionCache.current.size > 20) {
+          const entries = Array.from(suggestionCache.current.entries());
+          entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
+          suggestionCache.current.clear();
+          entries.slice(0, 20).forEach(([key, value]) => {
+            suggestionCache.current.set(key, value);
+          });
+        }
+        
         setSuggestion({
           text: response.suggestion,
           position: cursorPos,
@@ -85,10 +140,14 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
         });
         setShowSuggestion(true);
       }
-    } catch (error) {
+    } catch (error: any) {
+      if (error.name === 'AbortError') {
+        return; // Request was cancelled, ignore
+      }
       console.error('Error getting autocomplete suggestion:', error);
     } finally {
       setIsLoadingSuggestion(false);
+      abortControllerRef.current = null;
     }
   }, [projectId]);
 
@@ -118,10 +177,10 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       clearTimeout(timeoutRef.current);
     }
     
-    // Set timeout for AI autocomplete (4 seconds)
+    // Set timeout for AI autocomplete (reduced to 2 seconds for better UX)
     timeoutRef.current = setTimeout(() => {
       debouncedAutocomplete(newContent, cursorPos);
-    }, 4000);
+    }, 2000);
   };
 
   // Handle key presses
@@ -389,11 +448,20 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     );
   };
 
-  // Cleanup timeouts on unmount
+  // Cleanup timeouts and abort controllers on unmount
   useEffect(() => {
     return () => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current);
+      }
+      if (statusBarTimeoutRef.current) {
+        clearTimeout(statusBarTimeoutRef.current);
+      }
+      if (abortControllerRef.current) {
+        abortControllerRef.current.abort();
       }
     };
   }, []);
@@ -406,7 +474,23 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
   const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
 
   return (
-    <div className="h-full flex flex-col bg-white relative overflow-hidden">
+    <>
+      {/* Performance Monitor */}
+      <AILoadingState operation="autocomplete" isActive={isLoadingSuggestion} />
+      
+      <div className="h-full flex flex-col bg-white relative">
+      {/* Quick AI Access Button - Always visible for easy access */}
+      <div className="absolute top-6 left-6 z-20">
+        <button
+          onClick={openAIAssistant}
+          className="bg-gradient-to-r from-blue-500 to-purple-600 hover:from-blue-600 hover:to-purple-700 text-white px-4 py-2.5 rounded-full shadow-lg hover:shadow-xl transition-all duration-200 transform hover:scale-105 flex items-center space-x-2 group"
+          title="Open AI Assistant (Ctrl+K)"
+        >
+          <Icon name="sparkles" size="sm" className="text-white group-hover:animate-pulse" />
+          <span className="text-sm font-medium hidden sm:block">AI Assist</span>
+        </button>
+      </div>
+      
       {/* Floating Status Indicators - Minimal and auto-hiding */}
       {(isLoadingSuggestion || showSuggestion || isSaving) && (
         <div className="absolute top-6 right-6 z-20 animate-in fade-in duration-300">
@@ -607,6 +691,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
           </div>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 };
