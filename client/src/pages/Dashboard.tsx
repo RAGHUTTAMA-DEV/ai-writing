@@ -62,7 +62,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
       id: 'editor',
       label: 'Editor',
       icon: 'file-text',
-      gradient: 'from-indigo-500 to-purple-600'
+      gradient: 'from-gray-600 to-gray-700'
     },
     {
       id: 'ai-tools',
@@ -106,6 +106,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
               onSave={handleSave}
               onChange={handleContentChange}
               projectId={activeProject.id}
+              isFullScreen={isFullScreenMode}
             />
           </div>
         );
@@ -124,17 +125,47 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
     }
   };
 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(activeTab === 'editor');
+  const [isFullScreenMode, setIsFullScreenMode] = useState(false);
+
+  // Auto-collapse sidebar when in editor mode for more writing space
+  useEffect(() => {
+    if (activeTab === 'editor') {
+      setIsSidebarCollapsed(true);
+    } else {
+      setIsSidebarCollapsed(false);
+    }
+  }, [activeTab]);
+
   return (
     <div className="min-h-screen flex bg-gray-50">
-      {/* Sidebar Navigation */}
-      <div className="w-20 lg:w-64 bg-white border-r border-gray-200 flex flex-col">
+      {/* Collapsible Sidebar Navigation */}
+      <div className={`
+        ${isSidebarCollapsed ? 'w-16' : 'w-20 lg:w-64'} 
+        ${isFullScreenMode ? 'hidden' : ''} 
+        bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out
+        ${isSidebarCollapsed ? 'hover:w-20 lg:hover:w-64 hover:shadow-lg group' : ''}
+        overflow-visible relative z-40
+      `}>
         {/* Logo/Brand Area */}
-        <div className="p-4 lg:p-6 border-b border-gray-100">
+        <div className="p-4 lg:p-6 border-b border-gray-100 flex items-center justify-between">
           <div className="flex items-center space-x-3">
             <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
               <Icon name="sparkles" size="sm" className="text-white" />
             </div>
+            <span className={`font-bold text-gray-900 transition-opacity duration-300 ${isSidebarCollapsed ? 'opacity-0 lg:group-hover:opacity-100' : 'opacity-100'}`}>
+              AI Writer
+            </span>
           </div>
+          {activeTab === 'editor' && (
+            <button
+              onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+              className={`p-2 hover:bg-gray-100 rounded-lg transition-all duration-300 ${isSidebarCollapsed ? 'opacity-0 lg:group-hover:opacity-100' : 'opacity-100'}`}
+              title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
+            >
+              <Icon name={isSidebarCollapsed ? 'chevron-right' : 'chevron-left'} size="sm" className="text-gray-600" />
+            </button>
+          )}
         </div>
 
         {/* Navigation Items */}
@@ -144,8 +175,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
               key={item.id}
               onClick={() => setActiveTab(item.id)}
               className={`
-                w-full group relative flex items-center space-x-3 px-3 py-3 lg:px-4 lg:py-3 
-                rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-lg
+                w-full group relative flex items-center rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-lg
+                ${isSidebarCollapsed ? 'justify-center px-2 py-3' : 'space-x-3 px-3 py-3 lg:px-4 lg:py-3'}
                 ${activeTab === item.id 
                   ? `bg-gradient-to-r ${item.gradient} text-white shadow-lg` 
                   : 'text-gray-600 hover:bg-gray-100'
@@ -159,20 +190,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
               
               {/* Icon */}
               <div className={`
-                flex-shrink-0 w-10 h-10 lg:w-8 lg:h-8 flex items-center justify-center rounded-lg transition-all duration-300
+                flex-shrink-0 flex items-center justify-center rounded-lg transition-all duration-300
+                ${isSidebarCollapsed ? 'w-10 h-10' : 'w-10 h-10 lg:w-8 lg:h-8'}
                 ${activeTab === item.id ? 'bg-white/20' : 'bg-gray-100 group-hover:bg-white'}
               `}>
                 <Icon 
                   name={item.icon as any} 
-                  size="sm" 
+                  size={isSidebarCollapsed ? 'md' : 'sm'}
                   className={activeTab === item.id ? 'text-white' : 'text-gray-600 group-hover:text-gray-800'} 
                 />
               </div>
               
               {/* Label */}
               <span className={`
-                hidden lg:block text-sm font-semibold truncate transition-colors duration-300
-                ${activeTab === item.id ? 'text-white' : 'text-gray-700 group-hover:text-gray-900'}
+                text-sm font-semibold truncate transition-all duration-300
+                ${isSidebarCollapsed 
+                  ? 'opacity-0 group-hover:opacity-100 absolute left-full ml-3 bg-gray-900/95 backdrop-blur-sm text-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-[9999] pointer-events-none border border-gray-700 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-gray-900/95' 
+                  : 'hidden lg:block'
+                }
+                ${activeTab === item.id && !isSidebarCollapsed ? 'text-white' : 'text-gray-700 group-hover:text-gray-900'}
               `}>
                 {item.label}
               </span>
@@ -189,25 +225,50 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
 
         {/* Project Info */}
         <div className="p-3 lg:p-4 border-t border-gray-100">
-          <div className="flex items-center space-x-3 p-3 bg-gray-50 rounded-xl">
+          <div className={`group relative flex items-center p-3 bg-gray-50 rounded-xl transition-all duration-300 ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'}`}>
             <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
               <Icon name="book-open" size="xs" className="text-white" />
             </div>
-            <div className="hidden lg:block min-w-0 flex-1">
+            <div className={`min-w-0 flex-1 ${isSidebarCollapsed ? 'hidden' : 'block lg:block'}`}>
               <p className="text-sm font-medium text-gray-900 truncate">{activeProject.title}</p>
               <p className="text-xs text-gray-500">
                 {(activeProject.content || '').split(/\s+/).filter(word => word.length > 0).length} words
               </p>
             </div>
+            
+            {/* Collapsed state tooltip */}
+            {isSidebarCollapsed && (
+              <div className="opacity-0 group-hover:opacity-100 absolute left-full ml-3 bg-gray-900/95 backdrop-blur-sm text-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-[9999] pointer-events-none border border-gray-700 transition-opacity duration-300 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-gray-900/95">
+                <p className="text-sm font-medium">{activeProject.title}</p>
+                <p className="text-xs text-gray-300">
+                  {(activeProject.content || '').split(/\s+/).filter(word => word.length > 0).length} words
+                </p>
+              </div>
+            )}
           </div>
         </div>
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
+      <div className="flex-1 flex flex-col min-w-0 relative">
+        {/* Full-screen toggle for writing mode */}
+        {activeTab === 'editor' && (
+          <button
+            onClick={() => setIsFullScreenMode(!isFullScreenMode)}
+            className={`
+              absolute top-4 right-4 z-30 p-2 bg-white/80 hover:bg-white border border-gray-200 
+              rounded-lg shadow-sm transition-all duration-200 hover:shadow-md
+              ${isFullScreenMode ? 'fixed top-4 right-4' : ''}
+            `}
+            title={isFullScreenMode ? 'Exit full-screen' : 'Enter full-screen writing mode'}
+          >
+            <Icon name={isFullScreenMode ? 'minimize-2' : 'maximize-2'} size="sm" className="text-gray-600" />
+          </button>
+        )}
+        
         {/* Content */}
-        <main className="flex-1">
-          <div className="w-full">
+        <main className={`flex-1 ${isFullScreenMode ? 'fixed inset-0 z-20 bg-white' : ''}`}>
+          <div className="w-full h-full">
             {renderContent()}
           </div>
         </main>

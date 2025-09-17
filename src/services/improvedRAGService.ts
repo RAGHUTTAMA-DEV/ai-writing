@@ -885,9 +885,14 @@ Return only a number between 0.0 and 1.0.`;
         console.log('🛑 Embedding rate limited, document added to text search only');
       }
 
-      // Update project context
+  // Update project context
       if (projectId) {
         await this.syncProjectContext(projectId);
+        
+        // Clear project stats cache to force recalculation
+        const statsKey = CacheKeys.projectStats(projectId);
+        projectCache.delete(statsKey);
+        console.log(`🧹 Cleared project stats cache for ${projectId}`);
       }
 
       // Persist data
@@ -1116,19 +1121,19 @@ Style: `;
     };
   }
 
-  // Project context management with caching
+  // Project context management with real-time sync
   async syncProjectContext(projectId: string): Promise<ProjectContext | null> {
     try {
-      // Check cache first
-      const cacheKey = CacheKeys.projectContext(projectId);
-      const cachedContext = projectCache.get<ProjectContext>(cacheKey);
+      console.log(`🔄 Force syncing project context for ${projectId} (bypassing cache for accuracy)`);
       
-      if (cachedContext) {
-        console.log(`🎯 Returning cached project context for ${projectId}`);
-        // Also update local cache
-        this.projectContexts.set(projectId, cachedContext);
-        return cachedContext;
-      }
+      // Clear both caches to ensure fresh data
+      const cacheKey = CacheKeys.projectContext(projectId);
+      const projectStatsKey = CacheKeys.projectStats(projectId);
+      projectCache.delete(cacheKey);
+      projectCache.delete(projectStatsKey);
+      
+      // Remove from local cache too
+      this.projectContexts.delete(projectId);
       
       // Check local memory cache
       const localContext = this.projectContexts.get(projectId);
@@ -1157,13 +1162,12 @@ Style: `;
         
         console.log(`✅ Found project "${project.title}" with content, analyzing...`);
         
-        // Analyze the project content with caching
+        // Clear analysis cache and get fresh analysis
         const analysisKey = CacheKeys.ragAnalysis(this.hashContent(project.content!), projectId);
-        const analysis = await cacheService.getOrSet(
-          analysisKey,
-          () => this.analyzeProjectContent(project.content!),
-          1800 // 30 minutes cache for analysis
-        );
+        cacheService.delete(analysisKey);
+        console.log(`🧹 Cleared analysis cache for fresh AI analysis`);
+        
+        const analysis = await this.analyzeProjectContent(project.content!);
         
         projectContext = {
           projectId,
@@ -1181,11 +1185,10 @@ Style: `;
         const contentHash = this.hashContent(aggregatedContent);
         
         const analysisKey = CacheKeys.ragAnalysis(contentHash, projectId);
-        const analysis = await cacheService.getOrSet(
-          analysisKey,
-          () => this.analyzeProjectContent(aggregatedContent),
-          1800
-        );
+        cacheService.delete(analysisKey);
+        console.log(`🧹 Cleared aggregated analysis cache for fresh results`);
+        
+        const analysis = await this.analyzeProjectContent(aggregatedContent);
 
         projectContext = {
           projectId,
@@ -1206,6 +1209,10 @@ Style: `;
         });
       }
 
+      // Clear related caches first
+      const statsKey = CacheKeys.projectStats(projectId);
+      projectCache.delete(statsKey);
+      
       // Cache the context
       this.projectContexts.set(projectId, projectContext);
       projectCache.set(cacheKey, projectContext, 1800); // 30 minutes
@@ -1270,7 +1277,7 @@ Style: `;
     };
   }
 
-  // Get project statistics with caching
+  // Get project statistics with real-time data (bypassing cache for accuracy)
   async getProjectStats(projectId: string): Promise<{
     totalDocuments: number;
     totalChunks: number;
@@ -1284,13 +1291,10 @@ Style: `;
     totalWordCount: number;
     lastUpdated?: Date;
   }> {
-    const cacheKey = CacheKeys.projectStats(projectId);
+    console.log(`🔄 Getting REAL-TIME project stats for ${projectId} (bypassing cache)`);
     
-    return await projectCache.getOrSet(
-      cacheKey,
-      async () => this.calculateProjectStats(projectId),
-      900 // 15 minutes cache
-    );
+    // Always calculate fresh stats to avoid cache issues
+    return this.calculateProjectStats(projectId);
   }
   
   // Calculate project statistics (cached internally)
@@ -1308,13 +1312,51 @@ Style: `;
     let totalWordCount = 0;
     let validImportanceCount = 0;
 
-    projectDocs.forEach(doc => {
+    console.log(`📊 Calculating stats for project ${projectId} with ${projectDocs.length} documents`);
+    
+    projectDocs.forEach((doc, index) => {
+      console.log(`📄 Document ${index + 1} characters:`, doc.metadata.characters);
+      
       // Aggregate metadata
-      doc.metadata.characters?.forEach(char => characters.add(char));
-      doc.metadata.themes?.forEach(theme => themes.add(theme));
-      doc.metadata.emotions?.forEach(emotion => emotions.add(emotion));
-      doc.metadata.plotElements?.forEach(element => plotElements.add(element));
-      doc.metadata.semanticTags?.forEach(tag => semanticTags.add(tag));
+      if (doc.metadata.characters && Array.isArray(doc.metadata.characters)) {
+        doc.metadata.characters.forEach(char => {
+          if (char && typeof char === 'string' && char.trim().length > 0) {
+            characters.add(char.trim());
+          }
+        });
+      }
+      
+      if (doc.metadata.themes && Array.isArray(doc.metadata.themes)) {
+        doc.metadata.themes.forEach(theme => {
+          if (theme && typeof theme === 'string' && theme.trim().length > 0) {
+            themes.add(theme.trim());
+          }
+        });
+      }
+      
+      if (doc.metadata.emotions && Array.isArray(doc.metadata.emotions)) {
+        doc.metadata.emotions.forEach(emotion => {
+          if (emotion && typeof emotion === 'string' && emotion.trim().length > 0) {
+            emotions.add(emotion.trim());
+          }
+        });
+      }
+      
+      if (doc.metadata.plotElements && Array.isArray(doc.metadata.plotElements)) {
+        doc.metadata.plotElements.forEach(element => {
+          if (element && typeof element === 'string' && element.trim().length > 0) {
+            plotElements.add(element.trim());
+          }
+        });
+      }
+      
+      if (doc.metadata.semanticTags && Array.isArray(doc.metadata.semanticTags)) {
+        doc.metadata.semanticTags.forEach(tag => {
+          if (tag && typeof tag === 'string' && tag.trim().length > 0) {
+            semanticTags.add(tag.trim());
+          }
+        });
+      }
       
       if (doc.metadata.contentType) contentTypes.add(doc.metadata.contentType);
       
@@ -1326,9 +1368,33 @@ Style: `;
       totalWordCount += doc.metadata.wordCount || 0;
     });
 
+    // Also check project context for additional characters/themes
     const projectContext = this.projectContexts.get(projectId);
-
-    return {
+    if (projectContext) {
+      console.log(`🎯 Project context has:`, {
+        characters: projectContext.characters?.length || 0,
+        themes: projectContext.themes?.length || 0
+      });
+      
+      // Merge with project context (but prioritize document analysis)
+      if (projectContext.characters && Array.isArray(projectContext.characters)) {
+        projectContext.characters.forEach(char => {
+          if (char && typeof char === 'string' && char.trim().length > 0) {
+            characters.add(char.trim());
+          }
+        });
+      }
+      
+      if (projectContext.themes && Array.isArray(projectContext.themes)) {
+        projectContext.themes.forEach(theme => {
+          if (theme && typeof theme === 'string' && theme.trim().length > 0) {
+            themes.add(theme.trim());
+          }
+        });
+      }
+    }
+    
+    const result = {
       totalDocuments: projectDocs.length,
       totalChunks: projectDocs.reduce((sum, doc) => sum + (doc.metadata.totalChunks || 1), 0),
       characters: Array.from(characters),
@@ -1341,6 +1407,16 @@ Style: `;
       totalWordCount,
       lastUpdated: projectContext?.lastUpdated
     };
+    
+    console.log(`✅ Final calculated stats:`, {
+      totalDocuments: result.totalDocuments,
+      charactersFound: result.characters.length,
+      characters: result.characters,
+      themesFound: result.themes.length,
+      themes: result.themes
+    });
+    
+    return result;
   }
 
   // Helper methods

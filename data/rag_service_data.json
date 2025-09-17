@@ -131,8 +131,192 @@
         ],
         "wordCount": 29
       }
+    },
+    {
+      "pageContent": "This is the best thor story ever written.Thor is the main charater in the story.Thor, god of thunder, surveyed the battlefield, his gaze a mix of determination and sorrow.This is the e",
+      "metadata": {
+        "id": "35bc3395badf_1758124143705",
+        "projectId": "317e0827-701b-40a0-a9cf-e866d7b60ccc",
+        "timestamp": "2025-09-17T15:49:03.705Z",
+        "userId": "6bcae10c-a7db-48f7-b68f-64a67f666d45",
+        "projectTitle": "Thor ",
+        "contentType": "setting",
+        "importance": 1.6,
+        "characters": [
+          "Thor"
+        ],
+        "themes": [
+          "War",
+          "Duty",
+          "Loss"
+        ],
+        "emotions": [
+          "Determination",
+          "Sorrow"
+        ],
+        "plotElements": [
+          "Battlefield",
+          "Surveying the aftermath"
+        ],
+        "semanticTags": [
+          "Fantasy",
+          "Mythology",
+          "Norse",
+          "Gods",
+          "Thunder"
+        ],
+        "wordCount": 32
+      }
+    },
+    {
+      "pageContent": "This is the best thor story ever written.Thor is the main charater in the story.Thor, god of thunder, surveyed the battlefield, his gaze a mix of determination and sorrow.His father name is Odin.",
+      "metadata": {
+        "id": "1fac838ce25d_1758125321368",
+        "projectId": "317e0827-701b-40a0-a9cf-e866d7b60ccc",
+        "timestamp": "2025-09-17T16:08:41.368Z",
+        "userId": "6bcae10c-a7db-48f7-b68f-64a67f666d45",
+        "projectTitle": "Thor ",
+        "contentType": "setting",
+        "importance": 1.7,
+        "characters": [
+          "Thor",
+          "Odin"
+        ],
+        "themes": [
+          "War",
+          "Duty",
+          "Family"
+        ],
+        "emotions": [
+          "Determination",
+          "Sorrow"
+        ],
+        "plotElements": [
+          "Battlefield survey",
+          "Mention of parentage"
+        ],
+        "semanticTags": [
+          "Mythology",
+          "Superhero",
+          "Fantasy",
+          "God of Thunder"
+        ],
+        "wordCount": 33
+      }
+    },
+    {
+      "pageContent": "This is the best thor story ever written.Thor is the main charater in the story.Thor, god of thunder, surveyed the battlefield, his gaze a mix of determination and sorrow.His father name is Odin.",
+      "metadata": {
+        "id": "1fac838ce25d_1758126126119",
+        "projectId": "317e0827-701b-40a0-a9cf-e866d7b60ccc",
+        "timestamp": "2025-09-17T16:22:06.118Z",
+        "userId": "6bcae10c-a7db-48f7-b68f-64a67f666d45",
+        "projectTitle": "Thor ",
+        "contentType": "setting",
+        "importance": 1.7,
+        "characters": [
+          "Thor",
+          "Odin"
+        ],
+        "themes": [
+          "War",
+          "Responsibility",
+          "Family"
+        ],
+        "emotions": [
+          "Determination",
+          "Sorrow"
+        ],
+        "plotElements": [
+          "Battlefield",
+          "Surveying"
+        ],
+        "semanticTags": [
+          "Norse Mythology",
+          "Superhero",
+          "Fantasy",
+          "Action"
+        ],
+        "wordCount": 33
+      }
+    },
+    {
+      "pageContent": "\"Thor, god of thunder, surveyed the battlefield, his gaze a steely mask hiding a tremor of sorrow. The air hung thick with the stench of ozone and blood, a grim testament to the battle that had raged through the night. At his feet lay the shattered remains of a frost giant, a chilling reminder of the cost of victory. *He had sworn to protect Midgard, a duty etched into his very being, but the faces of the fallen haunted his every step.* His father, Odin, would expect a report of the victory; instead, Thor knew he must plead for another way.\"His brother name is Loki\n\n",
+      "metadata": {
+        "id": "189100a3d15a_1758126219989",
+        "projectId": "317e0827-701b-40a0-a9cf-e866d7b60ccc",
+        "timestamp": "2025-09-17T16:23:39.989Z",
+        "userId": "6bcae10c-a7db-48f7-b68f-64a67f666d45",
+        "projectTitle": "Thor ",
+        "contentType": "narrative",
+        "importance": 2.1999999999999997,
+        "characters": [
+          "Thor",
+          "Odin",
+          "Loki",
+          "Frost Giant"
+        ],
+        "themes": [
+          "Duty",
+          "Sacrifice",
+          "Cost of Victory",
+          "Protection"
+        ],
+        "emotions": [
+          "Sorrow",
+          "Grimness",
+          "Haunted",
+          "Determination"
+        ],
+        "plotElements": [
+          "Battle",
+          "Victory",
+          "Loss",
+          "Pleading"
+        ],
+        "semanticTags": [
+          "Mythology",
+          "Fantasy",
+          "War",
+          "Norse Mythology",
+          "Gods",
+          "Midgard"
+        ],
+        "wordCount": 106
+      }
     }
   ],
-  "projectContexts": [],
-  "lastUpdated": "2025-09-17T14:43:52.727Z"
+  "projectContexts": [
+    [
+      "317e0827-701b-40a0-a9cf-e866d7b60ccc",
+      {
+        "projectId": "317e0827-701b-40a0-a9cf-e866d7b60ccc",
+        "characters": [
+          "Thor",
+          "Odin",
+          "Loki",
+          "frost giant"
+        ],
+        "themes": [
+          "duty",
+          "sacrifice",
+          "war",
+          "responsibility",
+          "protection"
+        ],
+        "plotPoints": [
+          "battle",
+          "victory",
+          "surveying battlefield",
+          "pleading",
+          "protecting Midgard"
+        ],
+        "settings": [],
+        "writingStyle": "concise, direct narrative-focused",
+        "toneAnalysis": "action",
+        "lastUpdated": "2025-09-17T16:23:59.871Z"
+      }
+    ]
+  ],
+  "lastUpdated": "2025-09-17T16:24:58.386Z"
 }
