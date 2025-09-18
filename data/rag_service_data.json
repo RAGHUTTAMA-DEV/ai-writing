@@ -483,6 +483,40 @@
         ],
         "wordCount": 121
       }
+    },
+    {
+      "pageContent": "Chapter 1:\n\n\"Thor, god of thunder, surveyed the battlefield, his gaze a steely mask hiding a tremor of sorrow. The air hung thick with the stench of ozone and blood, a grim testament to the battle that had raged through the night. At his feet lay the shattered remains of a frost giant, a chilling reminder of the cost of victory. *He had sworn to protect Midgard, a duty etched into his very being, but the faces of the fallen haunted his every step.* His father, Odin, would expect a report of the victory; instead, Thor knew he must plead for another way.\"This is the end of chapter 1\n\nChapter 2:\n\nHis brother was Loki and he was very crual outside but inside he was good\n\n\n",
+      "metadata": {
+        "id": "7f42a62d8400_1758202168634",
+        "projectId": "2f195de2-996a-48a9-9826-d82af129444b",
+        "timestamp": "2025-09-18T13:29:28.634Z",
+        "userId": "fffad799-c2b6-4824-b862-322c57bb143c",
+        "projectTitle": "Thor",
+        "contentType": "narrative",
+        "importance": 1.7000000000000002,
+        "characters": [
+          "Thor",
+          "Midgard",
+          "His",
+          "Odin",
+          "Chapter",
+          "Loki"
+        ],
+        "themes": [
+          "family"
+        ],
+        "emotions": [
+          "sadness",
+          "anger"
+        ],
+        "plotElements": [],
+        "semanticTags": [
+          "action",
+          "dialogue",
+          "multi-paragraph"
+        ],
+        "wordCount": 127
+      }
     }
   ],
   "projectContexts": [
@@ -545,5 +579,5 @@
       }
     ]
   ],
-  "lastUpdated": "2025-09-17T20:31:49.917Z"
+  "lastUpdated": "2025-09-18T13:29:28.638Z"
 }

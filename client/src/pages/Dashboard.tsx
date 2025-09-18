@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
-import { useAIStore } from '../store/useAIStore';
-import { Card, CardContent, CardHeader, CardTitle } from '../components/ui/card';
 import { CopilotEditor } from '../components/CopilotEditor';
 import { AIToolsPanel } from '../components/AI/AIToolsPanel';
 import { ChatbotPanel } from '../components/AI/ChatbotPanel';
@@ -136,6 +134,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
 
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(activeTab === 'editor');
   const [isFullScreenMode, setIsFullScreenMode] = useState(false);
+  const [showFullScreenNotification, setShowFullScreenNotification] = useState(false);
 
   // Auto-collapse sidebar when in editor mode for more writing space
   useEffect(() => {
@@ -145,6 +144,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
       setIsSidebarCollapsed(false);
     }
   }, [activeTab]);
+
+  // Add keyboard support for full-screen mode
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Exit full-screen mode with Escape key
+      if (event.key === 'Escape' && isFullScreenMode) {
+        setIsFullScreenMode(false);
+        event.preventDefault();
+      }
+      // Toggle full-screen mode with F11 (optional)
+      if (event.key === 'F11' && activeTab === 'editor') {
+        setIsFullScreenMode(!isFullScreenMode);
+        event.preventDefault();
+      }
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [isFullScreenMode, activeTab]);
+
+  // Show notification when entering full-screen mode
+  useEffect(() => {
+    if (isFullScreenMode) {
+      setShowFullScreenNotification(true);
+      const timer = setTimeout(() => {
+        setShowFullScreenNotification(false);
+      }, 4000); // Hide after 4 seconds
+      return () => clearTimeout(timer);
+    }
+  }, [isFullScreenMode]);
 
   return (
     <div className="min-h-screen flex bg-gray-50">
@@ -156,20 +185,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
         ${isSidebarCollapsed ? 'hover:w-20 lg:hover:w-64 hover:shadow-lg group' : ''}
         overflow-visible relative z-40
       `}>
-        {/* Logo/Brand Area */}
-        <div className="p-4 lg:p-6 border-b border-gray-100 flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
-              <Icon name="sparkles" size="sm" className="text-white" />
-            </div>
-            <span className={`font-bold text-gray-900 transition-opacity duration-300 ${isSidebarCollapsed ? 'opacity-0 lg:group-hover:opacity-100' : 'opacity-100'}`}>
-              AI Writer
-            </span>
-          </div>
+        {/* Sidebar Header with Collapse Button */}
+        <div className="p-4 lg:p-6 border-b border-gray-100 flex items-center justify-center">
           {activeTab === 'editor' && (
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className={`p-2 hover:bg-gray-100 rounded-lg transition-all duration-300 ${isSidebarCollapsed ? 'opacity-0 lg:group-hover:opacity-100' : 'opacity-100'}`}
+              className={`p-2 hover:bg-gray-100 rounded-lg transition-all duration-300 ${isSidebarCollapsed ? 'opacity-50 hover:opacity-100' : 'opacity-100'}`}
               title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               <Icon name={isSidebarCollapsed ? 'chevron-right' : 'chevron-left'} size="sm" className="text-gray-600" />
@@ -188,7 +209,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
                 ${isSidebarCollapsed ? 'justify-center px-2 py-3' : 'space-x-3 px-3 py-3 lg:px-4 lg:py-3'}
                 ${activeTab === item.id 
                   ? `bg-gradient-to-r ${item.gradient} text-white shadow-lg` 
-                  : 'text-gray-600 hover:bg-gray-100'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
                 }
               `}
             >
@@ -201,12 +222,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
               <div className={`
                 flex-shrink-0 flex items-center justify-center rounded-lg transition-all duration-300
                 ${isSidebarCollapsed ? 'w-10 h-10' : 'w-10 h-10 lg:w-8 lg:h-8'}
-                ${activeTab === item.id ? 'bg-white/20' : 'bg-gray-100 group-hover:bg-white'}
+                ${activeTab === item.id ? 'bg-white/20' : 'bg-gray-100 group-hover:bg-gray-200'}
               `}>
                 <Icon 
                   name={item.icon as any} 
                   size={isSidebarCollapsed ? 'md' : 'sm'}
-                  className={activeTab === item.id ? 'text-white' : 'text-gray-600 group-hover:text-gray-800'} 
+                  className={activeTab === item.id ? 'text-white' : 'text-gray-600 group-hover:text-gray-700'} 
                 />
               </div>
               
@@ -217,7 +238,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
                   ? 'opacity-0 group-hover:opacity-100 absolute left-full ml-3 bg-gray-900/95 backdrop-blur-sm text-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-[9999] pointer-events-none border border-gray-700 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-gray-900/95' 
                   : 'hidden lg:block'
                 }
-                ${activeTab === item.id && !isSidebarCollapsed ? 'text-white' : 'text-gray-700 group-hover:text-gray-900'}
+                ${activeTab === item.id && !isSidebarCollapsed ? 'text-white' : 'text-gray-700 group-hover:text-gray-800'}
               `}>
                 {item.label}
               </span>
@@ -263,16 +284,71 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
         {/* Full-screen toggle for writing mode */}
         {activeTab === 'editor' && (
           <button
-            onClick={() => setIsFullScreenMode(!isFullScreenMode)}
+            onClick={() => {
+              setIsFullScreenMode(!isFullScreenMode);
+              if (!isFullScreenMode) {
+                // Entering full-screen mode - notification will show via useEffect
+              }
+            }}
             className={`
-              absolute top-4 right-4 z-30 p-2 bg-white/80 hover:bg-white border border-gray-200 
-              rounded-lg shadow-sm transition-all duration-200 hover:shadow-md
-              ${isFullScreenMode ? 'fixed top-4 right-4' : ''}
+              ${isFullScreenMode 
+                ? 'fixed top-4 right-4 z-50 p-3 bg-gray-900/90 hover:bg-gray-900 border border-gray-700 text-white backdrop-blur-sm shadow-xl animate-pulse hover:animate-none' 
+                : 'absolute top-4 right-4 z-30 p-2 bg-white/80 hover:bg-white border border-gray-200 shadow-sm'
+              }
+              rounded-lg transition-all duration-200 hover:shadow-md hover:scale-105
+              flex items-center justify-center group
             `}
-            title={isFullScreenMode ? 'Exit full-screen' : 'Enter full-screen writing mode'}
+            title={isFullScreenMode ? 'Exit full-screen mode (Press Esc or F11)' : 'Enter full-screen writing mode (Press F11)'}
           >
-            <Icon name={isFullScreenMode ? 'minimize-2' : 'maximize-2'} size="sm" className="text-gray-600" />
+            <Icon 
+              name={isFullScreenMode ? 'minimize-2' : 'maximize-2'} 
+              size={isFullScreenMode ? 'md' : 'sm'} 
+              className={isFullScreenMode ? 'text-white group-hover:text-gray-200' : 'text-gray-600 group-hover:text-gray-800'} 
+            />
+            {isFullScreenMode && (
+              <span className="absolute -bottom-8 left-1/2 transform -translate-x-1/2 text-xs text-gray-500 whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                Press Esc to exit
+              </span>
+            )}
           </button>
+        )}
+
+        {/* Additional exit button in bottom-right corner for full-screen mode */}
+        {activeTab === 'editor' && isFullScreenMode && (
+          <button
+            onClick={() => setIsFullScreenMode(false)}
+            className="
+              fixed bottom-4 right-4 z-50 p-2 bg-red-600/90 hover:bg-red-700 border border-red-500 
+              text-white backdrop-blur-sm shadow-xl rounded-full transition-all duration-200 
+              hover:shadow-2xl hover:scale-110 group animate-bounce hover:animate-none
+            "
+            title="Exit full-screen mode"
+          >
+            <Icon 
+              name="x" 
+              size="sm" 
+              className="text-white group-hover:text-red-100" 
+            />
+          </button>
+        )}
+
+        {/* Full-screen mode notification */}
+        {isFullScreenMode && showFullScreenNotification && (
+          <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 
+                          bg-gray-900/95 backdrop-blur-sm text-white px-6 py-4 rounded-lg shadow-2xl 
+                          transition-all duration-300 animate-fade-in">
+            <div className="flex items-center space-x-3">
+              <Icon name="maximize-2" size="md" className="text-blue-400" />
+              <div>
+                <p className="font-medium text-lg">Full-screen Mode Activated</p>
+                <p className="text-sm text-gray-300 mt-1">
+                  Press <kbd className="px-2 py-1 bg-gray-800 rounded text-xs">Esc</kbd> or 
+                  <kbd className="px-2 py-1 bg-gray-800 rounded text-xs ml-1">F11</kbd> to exit, 
+                  or click the buttons in the corners
+                </p>
+              </div>
+            </div>
+          </div>
         )}
         
         {/* Content */}

@@ -22,6 +22,7 @@ import {
   Users,
   ChevronRight,
   ChevronDown,
+  ChevronLeft,
   Sparkles,
   RefreshCw,
   CheckCircle,
@@ -64,6 +65,8 @@ import {
   VolumeX,
   Maximize,
   Minimize,
+  Maximize2,
+  Minimize2,
   MoreHorizontal,
   MoreVertical,
   Key,
@@ -71,6 +74,10 @@ import {
   Unlock,
   LogIn,
   UserPlus,
+  Send,
+  Layers,
+  Type,
+  Hash,
 } from 'lucide-react';
 
 // Icon registry mapping
@@ -97,6 +104,7 @@ export const iconRegistry = {
   'users': Users,
   'chevron-right': ChevronRight,
   'chevron-down': ChevronDown,
+  'chevron-left': ChevronLeft,
   'sparkles': Sparkles,
   'refresh': RefreshCw,
   'check-circle': CheckCircle,
@@ -138,6 +146,8 @@ export const iconRegistry = {
   'volume-off': VolumeX,
   'maximize': Maximize,
   'minimize': Minimize,
+  'maximize-2': Maximize2,
+  'minimize-2': Minimize2,
   'more-horizontal': MoreHorizontal,
   'more-vertical': MoreVertical,
   'key': Key,
@@ -145,6 +155,11 @@ export const iconRegistry = {
   'unlock': Unlock,
   'login': LogIn,
   'user-plus': UserPlus,
+  'send': Send,
+  'layers': Layers,
+  'type': Type,
+  'hash': Hash,
+  'refresh-cw': RefreshCw,
 } as const;
 
 export type IconName = keyof typeof iconRegistry;

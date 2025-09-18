@@ -4,7 +4,6 @@ import { useProjectStore } from '../../store/useProjectStore';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
 import { Icon, BrandIcon } from '../ui/icon';
-import type { Project } from '../../store/useProjectStore';
 
 // --- Sub-components for better organization ---
 
@@ -15,20 +14,21 @@ const Brand = () => (
     </div>
     <div className="hidden sm:block">
       <h1 className="text-xl font-bold text-gradient tracking-tight">
-        StoryForge
+        AI Writer
       </h1>
       <p className="text-xs text-gray-500 -mt-1">
-        AI Writing Studio
+        Writing Platform
       </p>
     </div>
   </div>
 );
 
 const ProjectControls = () => {
-  const { activeProject, projects, setActiveProject, createProject } = useProjectStore();
+  const { activeProject, projects, setActiveProject, createProject, getProjects } = useProjectStore();
 
   const handleProjectSelect = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const project = projects.find(p => p.id === e.target.value);
+    console.log('Project selected:', project);
     if (project) setActiveProject(project);
   };
 
@@ -56,24 +56,30 @@ const ProjectControls = () => {
           <select 
             value={activeProject?.id || ''}
             onChange={handleProjectSelect}
-            className="appearance-none bg-white border-2 border-gray-200 hover:border-indigo-300 focus:border-indigo-500 rounded-xl px-4 py-2.5 pr-10 text-sm font-medium text-gray-900 focus:ring-4 focus:ring-indigo-100 focus:outline-none transition-all duration-200 hover:shadow-md focus:shadow-lg min-w-40 max-w-56 cursor-pointer"
+            className="appearance-none bg-white/90 backdrop-blur-sm border-2 border-gray-200 hover:border-indigo-300 focus:border-indigo-500 rounded-xl px-4 py-2.5 pr-12 text-sm font-semibold text-gray-900 focus:ring-4 focus:ring-indigo-100 focus:outline-none transition-all duration-200 hover:shadow-lg focus:shadow-xl min-w-44 max-w-60 cursor-pointer hover:bg-white"
           >
             {!activeProject && <option value="" disabled>Select Project</option>}
             {projects.map(project => (
-              <option key={project.id} value={project.id} className="py-2">
-                {project.title.length > 25 ? `${project.title.slice(0, 25)}...` : project.title}
+              <option key={project.id} value={project.id} className="py-3 px-4 font-medium">
+                {project.title.length > 28 ? `${project.title.slice(0, 28)}...` : project.title}
               </option>
             ))}
           </select>
           
-          {/* Custom dropdown arrow */}
-          <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200 group-hover:scale-110">
-            <Icon name="chevron-down" size="sm" className="text-gray-500 group-hover:text-indigo-500" />
+          {/* Enhanced dropdown arrow */}
+          <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none transition-all duration-200 group-hover:scale-110 group-focus-within:rotate-180">
+            <div className="w-6 h-6 bg-gradient-to-br from-indigo-400 to-purple-500 rounded-md flex items-center justify-center shadow-sm">
+              <Icon name="chevron-down" size="xs" className="text-white transition-transform duration-200" />
+            </div>
           </div>
           
-          {/* Active project indicator */}
+          {/* Enhanced active project indicator */}
           {activeProject && (
-            <div className="absolute -top-1 -right-1 w-3 h-3 bg-green-500 rounded-full border-2 border-white shadow-sm animate-pulse"></div>
+            <div className="absolute -top-2 -right-2 flex items-center justify-center">
+              <div className="w-4 h-4 bg-green-500 rounded-full border-2 border-white shadow-md animate-pulse">
+                <div className="w-full h-full bg-green-400 rounded-full animate-ping opacity-75"></div>
+              </div>
+            </div>
           )}
         </div>
       )}
@@ -88,23 +94,39 @@ const ProjectControls = () => {
         <span className="hidden sm:inline">New Project</span>
         <span className="sm:hidden">New</span>
       </Button>
+      
+      <Button
+        onClick={() => getProjects()}
+        variant="outline"
+        size="sm"
+        className="flex items-center space-x-2 bg-white hover:bg-gray-50 border-2 border-gray-200 hover:border-gray-400 text-gray-600 hover:text-gray-700 font-semibold rounded-xl px-3 py-2.5 shadow-sm hover:shadow-md transition-all duration-200 hover:scale-[1.02]"
+        title="Refresh projects"
+      >
+        <Icon name="refresh" size="sm" className="text-gray-600" />
+      </Button>
     </div>
   );
 };
 
 const ActiveProjectInfo = () => {
-  //@ts-ignore
   const { activeProject, hasUnsavedChanges } = useProjectStore();
 
   const stats = useMemo(() => {
     if (!activeProject?.content) return { words: 0, characters: 0 };
     
-    const content = activeProject.content;
-    const words = content.split(/\s+/).filter(Boolean).length;
+    const content = activeProject.content || '';
+    const words = content.trim() ? content.split(/\s+/).filter(word => word.length > 0).length : 0;
     const characters = content.length;
     
     return { words, characters };
   }, [activeProject?.content]);
+
+  // Add debug logging
+  console.log('ActiveProjectInfo render:', {
+    activeProject: activeProject?.title,
+    content: activeProject?.content?.slice(0, 100) + '...',
+    stats
+  });
 
   if (!activeProject) return null;
 
@@ -185,6 +207,8 @@ const UserControls: React.FC<{ onLogout: () => void }> = ({ onLogout }) => {
 
 interface HeaderProps {
   onLogout: () => void;
+  onTabChange?: (tab: string) => void;
+  activeTab?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({ onLogout }) => {
