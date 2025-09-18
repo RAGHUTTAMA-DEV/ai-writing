@@ -495,6 +495,140 @@
     box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
   }
   
+  /* Mobile-specific utilities */
+  .touch-manipulation {
+    touch-action: manipulation;
+  }
+  
+  .tap-highlight-transparent {
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Mobile-first responsive text */
+  .text-responsive {
+    font-size: clamp(0.875rem, 2.5vw, 1rem);
+  }
+  
+  .text-responsive-sm {
+    font-size: clamp(0.75rem, 2vw, 0.875rem);
+  }
+  
+  .text-responsive-lg {
+    font-size: clamp(1rem, 3vw, 1.125rem);
+  }
+  
+  /* Mobile-optimized spacing */
+  .mobile-padding {
+    padding: 0.75rem;
+  }
+  
+  @media (min-width: 640px) {
+    .mobile-padding {
+      padding: 1rem;
+    }
+  }
+  
+  @media (min-width: 768px) {
+    .mobile-padding {
+      padding: 1.5rem;
+    }
+  }
+  
+  /* Mobile-optimized buttons */
+  .mobile-touch-target {
+    min-height: 44px;
+    min-width: 44px;
+  }
+  
+  /* Smooth scroll for better mobile UX */
+  .smooth-scroll {
+    -webkit-overflow-scrolling: touch;
+    scroll-behavior: smooth;
+  }
+  
+  /* Mobile sidebar overlay */
+  .mobile-overlay {
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  
+  /* Mobile slide animations */
+  .slide-in-left {
+    animation: slideInLeft 0.3s ease-out;
+  }
+  
+  .slide-out-left {
+    animation: slideOutLeft 0.3s ease-in;
+  }
+  
+  @keyframes slideInLeft {
+    from {
+      transform: translateX(-100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+  
+  @keyframes slideOutLeft {
+    from {
+      transform: translateX(0);
+      opacity: 1;
+    }
+    to {
+      transform: translateX(-100%);
+      opacity: 0;
+    }
+  }
+  
+  /* Mobile-specific responsive breakpoints */
+  @media (max-width: 640px) {
+    .mobile-text-sm {
+      font-size: 0.75rem;
+    }
+    
+    .mobile-p-2 {
+      padding: 0.5rem;
+    }
+    
+    .mobile-m-1 {
+      margin: 0.25rem;
+    }
+    
+    .mobile-gap-2 {
+      gap: 0.5rem;
+    }
+  }
+  
+  @media (max-width: 768px) {
+    .mobile-hidden {
+      display: none;
+    }
+    
+    .mobile-full-width {
+      width: 100%;
+    }
+    
+    .mobile-px-4 {
+      padding-left: 1rem;
+      padding-right: 1rem;
+    }
+  }
+  
+  /* Improve mobile performance */
+  @media (max-width: 768px) {
+    * {
+      transform: translateZ(0);
+    }
+    
+    .gpu-acceleration {
+      will-change: transform;
+      transform: translateZ(0);
+    }
+  }
+  
   /* Simple and reliable tooltip styling */
   .editor-tooltip {
     position: relative;

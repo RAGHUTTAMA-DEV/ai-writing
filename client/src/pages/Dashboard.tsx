@@ -177,20 +177,39 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
 
   return (
     <div className="min-h-screen flex bg-gray-50">
+      {/* Mobile Sidebar Overlay */}
+      {!isSidebarCollapsed && (
+        <div 
+          className="md:hidden fixed inset-0 bg-black/50 backdrop-blur-sm z-30 transition-opacity duration-300"
+          onClick={() => setIsSidebarCollapsed(true)}
+        />
+      )}
+      
       {/* Collapsible Sidebar Navigation */}
       <div className={`
-        ${isSidebarCollapsed ? 'w-16' : 'w-20 lg:w-64'} 
+        ${isSidebarCollapsed ? 'w-0 md:w-16' : 'w-72 md:w-20 lg:w-64'} 
         ${isFullScreenMode ? 'hidden' : ''} 
         bg-white border-r border-gray-200 flex flex-col transition-all duration-300 ease-in-out
-        ${isSidebarCollapsed ? 'hover:w-20 lg:hover:w-64 hover:shadow-lg group' : ''}
-        overflow-visible relative z-40
+        ${isSidebarCollapsed ? 'md:hover:w-20 lg:hover:w-64 hover:shadow-lg group overflow-hidden md:overflow-visible' : 'fixed md:relative'}
+        ${!isSidebarCollapsed ? 'fixed md:relative z-40 shadow-2xl md:shadow-none' : 'relative z-40'}
+        h-screen top-0 left-0
       `}>
         {/* Sidebar Header with Collapse Button */}
-        <div className="p-4 lg:p-6 border-b border-gray-100 flex items-center justify-center">
+        <div className="p-3 sm:p-4 lg:p-6 border-b border-gray-100 flex items-center justify-between md:justify-center">
+          {/* Mobile close button */}
+          <button
+            onClick={() => setIsSidebarCollapsed(true)}
+            className="md:hidden p-2 hover:bg-gray-100 rounded-lg transition-all duration-300"
+            title="Close sidebar"
+          >
+            <Icon name="x" size="sm" className="text-gray-600" />
+          </button>
+          
+          {/* Desktop collapse button */}
           {activeTab === 'editor' && (
             <button
               onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-              className={`p-2 hover:bg-gray-100 rounded-lg transition-all duration-300 ${isSidebarCollapsed ? 'opacity-50 hover:opacity-100' : 'opacity-100'}`}
+              className={`hidden md:block p-2 hover:bg-gray-100 rounded-lg transition-all duration-300 ${isSidebarCollapsed ? 'opacity-50 hover:opacity-100' : 'opacity-100'}`}
               title={isSidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}
             >
               <Icon name={isSidebarCollapsed ? 'chevron-right' : 'chevron-left'} size="sm" className="text-gray-600" />
@@ -199,17 +218,23 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
         </div>
 
         {/* Navigation Items */}
-        <nav className="flex-1 p-3 lg:p-4 space-y-2">
+        <nav className="flex-1 p-2 sm:p-3 lg:p-4 space-y-1 sm:space-y-2">
           {navigationItems.map((item) => (
             <button
               key={item.id}
-              onClick={() => setActiveTab(item.id)}
+              onClick={() => {
+                setActiveTab(item.id);
+                // Auto-close sidebar on mobile when selecting an item
+                if (window.innerWidth < 768) {
+                  setIsSidebarCollapsed(true);
+                }
+              }}
               className={`
-                w-full group relative flex items-center rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-lg
-                ${isSidebarCollapsed ? 'justify-center px-2 py-3' : 'space-x-3 px-3 py-3 lg:px-4 lg:py-3'}
+                w-full group relative flex items-center rounded-xl transition-all duration-300 hover:scale-[1.02] hover:shadow-lg touch-manipulation
+                ${isSidebarCollapsed ? 'justify-center px-2 py-3 md:py-3' : 'space-x-3 px-3 py-4 sm:py-3 lg:px-4 lg:py-3'}
                 ${activeTab === item.id 
                   ? `bg-gradient-to-r ${item.gradient} text-white shadow-lg` 
-                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800'
+                  : 'text-gray-600 hover:bg-gray-50 hover:text-gray-800 active:bg-gray-100'
                 }
               `}
             >
@@ -221,8 +246,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
               {/* Icon */}
               <div className={`
                 flex-shrink-0 flex items-center justify-center rounded-lg transition-all duration-300
-                ${isSidebarCollapsed ? 'w-10 h-10' : 'w-10 h-10 lg:w-8 lg:h-8'}
-                ${activeTab === item.id ? 'bg-white/20' : 'bg-gray-100 group-hover:bg-gray-200'}
+                ${isSidebarCollapsed ? 'w-10 h-10 md:w-10 md:h-10' : 'w-10 h-10 lg:w-8 lg:h-8'}
+                ${activeTab === item.id ? 'bg-white/20' : 'bg-gray-100 group-hover:bg-gray-200 group-active:bg-gray-300'}
               `}>
                 <Icon 
                   name={item.icon as any} 
@@ -235,8 +260,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
               <span className={`
                 text-sm font-semibold truncate transition-all duration-300
                 ${isSidebarCollapsed 
-                  ? 'opacity-0 group-hover:opacity-100 absolute left-full ml-3 bg-gray-900/95 backdrop-blur-sm text-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-[9999] pointer-events-none border border-gray-700 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-gray-900/95' 
-                  : 'hidden lg:block'
+                  ? 'opacity-0 md:group-hover:opacity-100 absolute left-full ml-3 bg-gray-900/95 backdrop-blur-sm text-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-[9999] pointer-events-none border border-gray-700 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-gray-900/95 hidden md:block' 
+                  : 'block lg:block'
                 }
                 ${activeTab === item.id && !isSidebarCollapsed ? 'text-white' : 'text-gray-700 group-hover:text-gray-800'}
               `}>
@@ -254,13 +279,13 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
         </nav>
 
         {/* Project Info */}
-        <div className="p-3 lg:p-4 border-t border-gray-100">
-          <div className={`group relative flex items-center p-3 bg-gray-50 rounded-xl transition-all duration-300 ${isSidebarCollapsed ? 'justify-center' : 'space-x-3'}`}>
-            <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+        <div className="p-2 sm:p-3 lg:p-4 border-t border-gray-100">
+          <div className={`group relative flex items-center p-2 sm:p-3 bg-gray-50 rounded-xl transition-all duration-300 ${isSidebarCollapsed ? 'justify-center' : 'space-x-2 sm:space-x-3'}`}>
+            <div className="w-6 h-6 sm:w-8 sm:h-8 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
               <Icon name="book-open" size="xs" className="text-white" />
             </div>
-            <div className={`min-w-0 flex-1 ${isSidebarCollapsed ? 'hidden' : 'block lg:block'}`}>
-              <p className="text-sm font-medium text-gray-900 truncate">{activeProject.title}</p>
+            <div className={`min-w-0 flex-1 ${isSidebarCollapsed ? 'hidden md:hidden' : 'block'}`}>
+              <p className="text-xs sm:text-sm font-medium text-gray-900 truncate">{activeProject.title}</p>
               <p className="text-xs text-gray-500">
                 {(activeProject.content || '').split(/\s+/).filter(word => word.length > 0).length} words
               </p>
@@ -268,7 +293,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
             
             {/* Collapsed state tooltip */}
             {isSidebarCollapsed && (
-              <div className="opacity-0 group-hover:opacity-100 absolute left-full ml-3 bg-gray-900/95 backdrop-blur-sm text-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-[9999] pointer-events-none border border-gray-700 transition-opacity duration-300 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-gray-900/95">
+              <div className="hidden md:block opacity-0 group-hover:opacity-100 absolute left-full ml-3 bg-gray-900/95 backdrop-blur-sm text-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-[9999] pointer-events-none border border-gray-700 transition-opacity duration-300 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-gray-900/95">
                 <p className="text-sm font-medium">{activeProject.title}</p>
                 <p className="text-xs text-gray-300">
                   {(activeProject.content || '').split(/\s+/).filter(word => word.length > 0).length} words
@@ -281,6 +306,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
 
       {/* Main Content Area */}
       <div className="flex-1 flex flex-col min-w-0 relative">
+        {/* Mobile hamburger menu button */}
+        {isSidebarCollapsed && (
+          <button
+            onClick={() => setIsSidebarCollapsed(false)}
+            className="md:hidden fixed top-4 left-4 z-30 p-3 bg-white/90 hover:bg-white border border-gray-200 shadow-lg rounded-lg transition-all duration-200 hover:shadow-xl hover:scale-105 backdrop-blur-sm"
+            title="Open sidebar"
+          >
+            <Icon name="menu" size="sm" className="text-gray-600" />
+          </button>
+        )}
+        
         {/* Full-screen toggle for writing mode */}
         {activeTab === 'editor' && (
           <button
@@ -293,10 +329,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
             className={`
               ${isFullScreenMode 
                 ? 'fixed top-4 right-4 z-50 p-3 bg-gray-900/90 hover:bg-gray-900 border border-gray-700 text-white backdrop-blur-sm shadow-xl animate-pulse hover:animate-none' 
-                : 'absolute top-4 right-4 z-30 p-2 bg-white/80 hover:bg-white border border-gray-200 shadow-sm'
+                : `absolute top-4 z-30 p-2 bg-white/80 hover:bg-white border border-gray-200 shadow-sm ${isSidebarCollapsed ? 'right-4' : 'right-4 md:right-4'}`
               }
               rounded-lg transition-all duration-200 hover:shadow-md hover:scale-105
-              flex items-center justify-center group
+              flex items-center justify-center group touch-manipulation
             `}
             title={isFullScreenMode ? 'Exit full-screen mode (Press Esc or F11)' : 'Enter full-screen writing mode (Press F11)'}
           >
@@ -318,9 +354,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
           <button
             onClick={() => setIsFullScreenMode(false)}
             className="
-              fixed bottom-4 right-4 z-50 p-2 bg-red-600/90 hover:bg-red-700 border border-red-500 
+              fixed bottom-4 right-4 z-50 p-3 sm:p-2 bg-red-600/90 hover:bg-red-700 border border-red-500 
               text-white backdrop-blur-sm shadow-xl rounded-full transition-all duration-200 
               hover:shadow-2xl hover:scale-110 group animate-bounce hover:animate-none
+              touch-manipulation min-w-[3rem] min-h-[3rem] sm:min-w-0 sm:min-h-0
             "
             title="Exit full-screen mode"
           >
@@ -353,7 +390,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
         
         {/* Content */}
         <main className={`flex-1 ${isFullScreenMode ? 'fixed inset-0 z-20 bg-white' : ''}`}>
-          <div className="w-full h-full">
+          <div className={`w-full h-full ${!isFullScreenMode && isSidebarCollapsed ? 'md:pl-0' : ''}`}>
             {renderContent()}
           </div>
         </main>
