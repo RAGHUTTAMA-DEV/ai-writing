@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import apiService from '../services/api';
+import config from '../config';
 
 interface User {
   id: string;
@@ -50,7 +51,7 @@ export const useAuthStore = create<AuthState>()(
       },
 
       loginWithGoogle: () => {
-        const backendUrl = 'http://localhost:5000';
+        const backendUrl = config.API_BASE_URL.replace('/api', ''); // Remove /api suffix
         window.location.href = `${backendUrl}/api/auth/google`;
       },
 
