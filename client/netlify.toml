@@ -1,27 +1,18 @@
 [build]
-  # Build command
   command = "npm run build"
-  
-  # Directory to publish (Vite outputs to 'dist')
   publish = "dist"
-  
-  # Install command
-  base = "."
 
 [build.environment]
-  # Node.js version
   NODE_VERSION = "18"
-  
-  # Backend API URL - Set this in Netlify dashboard or here
   VITE_API_URL = "https://ai-writing-zpuh.onrender.com/api"
 
-# SPA (Single Page Application) routing
+# SPA routing for React Router
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-# Headers for better caching and security
+# Cache optimization
 [[headers]]
   for = "/assets/*"
   [headers.values]
@@ -36,30 +27,3 @@
   for = "/*.css"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
-
-[[headers]]
-  for = "/*.html"
-  [headers.values]
-    Cache-Control = "public, max-age=3600"
-    X-Frame-Options = "DENY"
-    X-XSS-Protection = "1; mode=block"
-    X-Content-Type-Options = "nosniff"
-    Referrer-Policy = "strict-origin-when-cross-origin"
-
-# Functions directory (if you plan to use Netlify Functions)
-[build.functions]
-  directory = "netlify/functions"
-
-# Form handling (if you have contact forms)
-[build.processing]
-  skip_processing = false
-
-# Plugin configuration (optional)
-[[plugins]]
-  package = "netlify-plugin-lighthouse"
-
-# Development settings
-[dev]
-  command = "npm run dev"
-  port = 5173
-  publish = "dist"
