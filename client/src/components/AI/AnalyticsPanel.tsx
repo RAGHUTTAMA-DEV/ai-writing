@@ -1,34 +1,22 @@
 import React, { useState, useEffect } from 'react';
-import { useProjectStore } from '../../store/useProjectStore';
-import { useAIStore } from '../../store/useAIStore';
 import apiService from '../../services/api';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Progress } from '../ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import { 
   BarChart3, 
-  TrendingUp,
   Target,
-  Clock,
   FileText,
   Users,
   Brain,
-  Calendar,
-  Award,
-  Zap,
   BookOpen,
-  PieChart,
   Activity,
-  CheckCircle,
   RefreshCw,
   Database,
   Eye,
   Hash,
-  Layers,
-  Film,
-  Sparkles
+  Layers
 } from 'lucide-react';
 import { StructureAnalysisPanel } from './StructureAnalysisPanel';
 
@@ -70,7 +58,6 @@ interface ProjectAnalytics {
 }
 
 export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => {
-  const { activeProject } = useProjectStore();
   const [analytics, setAnalytics] = useState<ProjectAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

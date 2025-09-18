@@ -1,5 +1,5 @@
 import React from 'react';
-import { Icon, LoadingIcon } from './icon';
+import { Icon } from './icon';
 import { cn } from '@/lib/utils';
 
 // Loading Spinner Component

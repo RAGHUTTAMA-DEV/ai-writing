@@ -52,21 +52,10 @@ interface UpdateProjectRequest {
   quickNotes?: string;
 }
 
-interface AISuggestionRequest {
-  projectId: string;
-  context: string;
-  analysisMode?: 'fast' | 'deep';
-}
-
 interface AISuggestionResponse {
   message: string;
   suggestions: string;
   analysisMode?: 'fast' | 'deep';
-}
-
-interface ChatbotSuggestionRequest {
-  context: string;
-  projectId?: string;
 }
 
 interface ChatbotSuggestionResponse {
@@ -74,31 +63,13 @@ interface ChatbotSuggestionResponse {
   suggestions: string;
 }
 
-interface WritingFlowQuestion {
-  question: string;
-}
-
 interface UserPreferences {
   [key: string]: string;
-}
-
-interface ThemeConsistencyRequest {
-  text: string;
-  theme: string;
-  projectId?: string;
-  analysisMode?: 'fast' | 'deep';
 }
 
 interface ThemeConsistencyResponse {
   message: string;
   analysis: string;
-  analysisMode?: 'fast' | 'deep';
-}
-
-interface ForeshadowingRequest {
-  text: string;
-  context?: string;
-  projectId?: string;
   analysisMode?: 'fast' | 'deep';
 }
 
@@ -108,31 +79,14 @@ interface ForeshadowingResponse {
   analysisMode?: 'fast' | 'deep';
 }
 
-interface MotivationStakesRequest {
-  text: string;
-  character: string;
-  projectId?: string;
-  analysisMode?: 'fast' | 'deep';
-}
-
 interface MotivationStakesResponse {
   message: string;
   evaluation: string;
   analysisMode?: 'fast' | 'deep';
 }
 
-interface RAGAddProjectRequest {
-  projectId: string;
-  content: string;
-}
-
 interface RAGAddProjectResponse {
   message: string;
-}
-
-interface RAGSearchRequest {
-  query: string;
-  limit?: number;
 }
 
 interface RAGSearchResponse {

@@ -34,7 +34,7 @@ interface AIState {
 
 export const useAIStore = create<AIState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       suggestions: [],
       themeAnalysis: [],
       foreshadowing: [],

@@ -22,7 +22,7 @@ interface ChatbotState {
   clearError: () => void;
 }
 
-export const useChatbotStore = create<ChatbotState>()((set, get) => ({
+export const useChatbotStore = create<ChatbotState>()((set) => ({
   preferences: {},
   questions: [],
   suggestions: [],

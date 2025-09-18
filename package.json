@@ -5,20 +5,18 @@
   "main": "dist/server.js",
   "scripts": {
     "start": "node dist/server.js",
-    "dev": "ts-node src/server.ts",
+    "dev": "npx prisma generate && ts-node src/server.ts",
     "build": "tsc",
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:studio": "npx prisma studio",
     "test": "jest",
     "init": "node init-project.js",
-    "check-env": "node check-env.js",
-    "test-langchain": "node test-langchain.js"
+    "check-env": "node check-env.js"
   },
   "dependencies": {
     "@langchain/community": "^0.0.57",
     "@langchain/google-genai": "^0.0.21",
-    "@langchain/openai": "^0.2.10",
     "@prisma/client": "^5.0.0",
     "@types/express-session": "^1.18.2",
     "@types/node-cache": "^4.1.3",

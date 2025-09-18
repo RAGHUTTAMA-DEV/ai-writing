@@ -3,7 +3,6 @@ import { useProjectStore } from '../../store/useProjectStore';
 import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
 import { Button } from '../ui/button';
 import { Badge } from '../ui/badge';
-import { Progress } from '../ui/progress';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '../ui/tabs';
 import {
   BookOpen,
@@ -13,12 +12,10 @@ import {
   Users,
   Target,
   Clock,
-  TrendingUp,
   Lightbulb,
   Eye,
   RefreshCw,
   Layers,
-  Play,
   ChevronRight,
   ChevronDown,
   Zap,
@@ -614,7 +611,7 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
                 <TabsContent value="themes" className="space-y-4">
                   {structureAnalysis.overallThemes.length > 0 ? (
                     <div className="grid gap-4">
-                      {structureAnalysis.overallThemes.map((theme, index) => (
+                      {structureAnalysis.overallThemes.map((theme) => (
                         <Card key={theme}>
                           <CardHeader>
                             <CardTitle className="flex items-center space-x-2">

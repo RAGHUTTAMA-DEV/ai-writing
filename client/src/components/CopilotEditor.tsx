@@ -30,6 +30,13 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
   const [isLoadingSuggestion, setIsLoadingSuggestion] = useState(false);
   const [showSuggestion, setShowSuggestion] = useState(false);
   
+  // AI Assistant suggestion type
+  interface AISuggestion {
+    type: 'summary' | 'correction' | 'suggestion' | 'general';
+    text: string;
+    label: string;
+  }
+  
   // AI Assistant state (Cursor-style)
   const [aiAssistant, setAiAssistant] = useState({
     isOpen: false,
@@ -38,7 +45,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     selectionEnd: 0,
     query: '',
     isProcessing: false,
-    suggestions: [] as string[]
+    suggestions: [] as AISuggestion[]
   });
   const [showStatusBar, setShowStatusBar] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
@@ -312,43 +319,6 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     setAiAssistant(prev => ({ ...prev, isOpen: false, query: '', suggestions: [], isProcessing: false }));
   };
   
-  const generateGeneralSuggestions = async () => {
-    if (!projectId) return;
-    
-    setAiAssistant(prev => ({ ...prev, isProcessing: true }));
-    
-    try {
-      const recentText = content.slice(-300); // Last 300 characters
-      const prompt = `The user is writing and wants general writing help.
-      
-      Recent context: "${recentText}"
-      
-      Provide helpful general writing suggestions, tips, and creative ideas they can use right now. Focus on practical advice they can immediately apply to improve their writing.`;
-      
-      const response = await apiService.generateAISuggestions(projectId, prompt, 'fast');
-      
-      // Parse the response to create general suggestions
-      const responseText = response.suggestions || '';
-      
-      // For general suggestions, create a different format
-      const suggestions = [
-        {
-          type: 'general',
-          text: responseText,
-          label: 'Writing Tips & Suggestions'
-        }
-      ];
-      
-      setAiAssistant(prev => ({ 
-        ...prev, 
-        isProcessing: false, 
-        suggestions 
-      }));
-    } catch (error) {
-      console.error('Error generating general suggestions:', error);
-      setAiAssistant(prev => ({ ...prev, isProcessing: false }));
-    }
-  };
 
   const handleAIQuery = async () => {
     if (!aiAssistant.query.trim() || !projectId) return;
@@ -404,7 +374,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       ).filter(text => text.length > 0);
       console.log('Individual suggestions:', individualSuggestions);
       
-      const suggestions = [];
+      const suggestions: AISuggestion[] = [];
       
       // Add summary first (for analysis)
       if (summary) {
@@ -461,7 +431,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     }
   };
 
-  const applySuggestion = (suggestion: any) => {
+  const applySuggestion = (suggestion: AISuggestion) => {
     console.log('Apply suggestion called:', suggestion);
     console.log('Selection start:', aiAssistant.selectionStart);
     console.log('Selection end:', aiAssistant.selectionEnd);

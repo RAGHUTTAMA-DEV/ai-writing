@@ -1,11 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useChatbotStore } from '../../store/useChatbotStore';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
+import { Card, CardContent } from '../ui/card';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
 import { 
-  MessageCircle, 
   Send, 
   RefreshCw, 
   Brain,

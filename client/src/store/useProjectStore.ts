@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import apiService from '../services/api';
-import { useAIStore } from './useAIStore';
 
 export interface Project {
   id: string;
@@ -57,7 +56,7 @@ interface ProjectState {
 
 export const useProjectStore = create<ProjectState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       projects: [],
       activeProject: null,
       loading: false,

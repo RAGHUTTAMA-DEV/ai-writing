@@ -109,7 +109,7 @@ const ProjectControls = () => {
 };
 
 const ActiveProjectInfo = () => {
-  const { activeProject, hasUnsavedChanges } = useProjectStore();
+  const { activeProject } = useProjectStore();
 
   const stats = useMemo(() => {
     if (!activeProject?.content) return { words: 0, characters: 0 };
@@ -160,13 +160,6 @@ const ActiveProjectInfo = () => {
         </div>
       </div>
 
-      {hasUnsavedChanges && (
-        <Badge variant="secondary" className="flex items-center space-x-1.5 animate-pulse bg-amber-50 text-amber-600 border-amber-200 text-xs px-3 py-1.5 rounded-lg">
-          <div className="w-2 h-2 bg-amber-400 rounded-full animate-pulse"></div>
-          <span className="hidden sm:inline font-medium">Unsaved Changes</span>
-          <span className="sm:hidden font-medium">Unsaved</span>
-        </Badge>
-      )}
     </div>
   );
 };
