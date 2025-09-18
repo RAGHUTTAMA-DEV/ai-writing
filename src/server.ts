@@ -26,7 +26,24 @@ const PORT: number = parseInt(process.env.PORT || '5000', 10);
 
 // Middleware
 app.use(helmet()); // Security headers
-app.use(cors()); // Enable CORS
+
+// Configure CORS with specific origins
+const corsOptions = {
+  origin: [
+    'https://ai-writings.netlify.app',
+    'http://localhost:3000',
+    'http://localhost:5173',
+    'https://localhost:3000',
+    'https://localhost:5173'
+  ],
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  preflightContinue: false,
+  optionsSuccessStatus: 200
+};
+
+app.use(cors(corsOptions)); // Enable CORS with specific configuration
 app.use(requestLogger); // Enhanced logging
 app.use(performanceService.requestTracker); // Performance monitoring
 
