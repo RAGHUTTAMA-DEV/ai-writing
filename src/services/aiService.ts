@@ -271,9 +271,9 @@ Continue with the most natural next 2-4 words that would flow perfectly. Only pr
         return cachedSuggestion;
       }
 
-      // FAST MODE: Skip complex processing for speed but include user preferences
+      // FAST MODE: Skip complex processing but provide comprehensive, fresh suggestions
       if (analysisMode === 'fast') {
-        console.log(`⚡ PERSONALIZED FAST MODE: Using user preferences for tailored suggestions`);
+        console.log(`⚡ ENHANCED FAST MODE: Generating detailed, fresh suggestions with emojis`);
         
         // Get user preferences for personalized suggestions
         let userPreferences = null;
@@ -288,53 +288,91 @@ Continue with the most natural next 2-4 words that would flow perfectly. Only pr
           }
         }
         
-        // Build personalized prompt based on user preferences
+        // Build personalized context based on user preferences
         let personalizedContext = '';
         if (userPreferences) {
-          personalizedContext = `\n\nUSER'S WRITING PREFERENCES:
-- Writing Style: ${userPreferences.writingStyle || 'Not specified'}
-- Genre: ${userPreferences.genre || 'Not specified'}
-- Tone Preference: ${userPreferences.tonePreference || 'Not specified'}
-- Themes: ${userPreferences.themes?.join(', ') || 'Not specified'}
-- Writing Goals: ${userPreferences.writingGoals?.join(', ') || 'Not specified'}
+          personalizedContext = `\n\n📝 USER'S WRITING PREFERENCES:
+• Writing Style: ${userPreferences.writingStyle || 'Adaptive'}
+• Genre: ${userPreferences.genre || 'General Fiction'}
+• Tone Preference: ${userPreferences.tonePreference || 'Balanced'}
+• Favorite Themes: ${userPreferences.themes?.join(', ') || 'Character-driven storytelling'}
+• Writing Goals: ${userPreferences.writingGoals?.join(', ') || 'Engaging narrative'}
 
-IMPORTANT: Tailor your suggestions to match the user's preferences. If their preference is "${userPreferences.genre || 'action'}", don't suggest deep romantic elements unless relevant. If they prefer "${userPreferences.writingStyle || 'concise'}", focus on that style.`;
+🎯 PERSONALIZATION NOTE: Tailor suggestions to match user's ${userPreferences.genre || 'preferred'} style and ${userPreferences.tonePreference || 'desired'} tone.`;
         }
         
-        // Enhanced prompt with personalization
-        const prompt = `You are an expert writing coach and literary editor. Analyze this text comprehensively:
+        // Enhanced comprehensive prompt with emojis and detailed structure
+        const prompt = `You are a world-class writing mentor and storytelling expert. Analyze this text and provide incredibly detailed, actionable suggestions that will elevate the writing to professional quality.
 
-"${context.slice(-300)}"
+📜 **TEXT TO ANALYZE:**
+"${context.slice(-400)}"
 ${personalizedContext}
 
-Provide a thorough analysis with immediate fixes and creative improvements tailored to the user's preferences.
+🎯 **COMPREHENSIVE WRITING ANALYSIS & SUGGESTIONS**
 
-Format your response EXACTLY like this:
+Provide your response in this EXACT format with emojis:
 
-SUMMARY:
-[Brief analysis of the text's strengths, weaknesses, tone, and style - 2-3 sentences. Reference user preferences when relevant.]
+## 📊 **QUICK ASSESSMENT**
+[2-3 sentences analyzing the text's current strengths, tone, style, and overall effectiveness. Be specific about what works and what needs improvement.]
 
-CORRECTED VERSION:
-[Provide corrected text with spelling/grammar fixes, or "No corrections needed"]
+## ✏️ **IMMEDIATE CORRECTIONS**
+[Fix any spelling, grammar, or punctuation errors. If none exist, write "No corrections needed - technically sound!"]
 
-SUGGESTIONS:
-1. [Specific improvement for style, flow, or clarity - tailored to user's writing style preference]
-2. [Character development or plot enhancement - aligned with user's genre preference]
-3. [Dialogue, description, or pacing improvement - matching user's tone preference]
-4. [Theme, mood, or literary technique - incorporating user's preferred themes]
+## 🚀 **DETAILED IMPROVEMENT SUGGESTIONS**
 
-SUMMARY:`;
+### 1. 🎨 **Style & Voice Enhancement**
+**Current Issue:** [What's limiting the style?]
+**Suggestion:** [Specific technique to improve voice/style]
+**Example:** [Show exactly how to implement this]
+
+### 2. 📈 **Story Structure & Flow**
+**Current Issue:** [Pacing, transitions, or structure problems]
+**Suggestion:** [Specific structural improvement]
+**Example:** [Concrete example or rewrite]
+
+### 3. 👥 **Character Development**
+**Current Issue:** [Character depth or believability issues]
+**Suggestion:** [How to make characters more compelling]
+**Example:** [Specific dialogue or action improvement]
+
+### 4. 🌟 **Atmosphere & Description**
+**Current Issue:** [Sensory details, setting, or mood]
+**Suggestion:** [How to create stronger atmosphere]
+**Example:** [Specific descriptive enhancement]
+
+### 5. 🎭 **Dialogue & Tension**
+**Current Issue:** [Dialogue quality or dramatic tension]
+**Suggestion:** [How to improve character voices/conflict]
+**Example:** [Better dialogue or tension-building technique]
+
+## 💎 **PREMIUM RECOMMENDATIONS**
+
+🎯 **#1 PRIORITY FIX:** [The one change that would have the biggest impact]
+
+✨ **ADVANCED TECHNIQUE:** [One sophisticated writing technique to elevate the prose]
+
+🔥 **ENGAGEMENT BOOSTER:** [How to make readers more emotionally invested]
+
+📚 **GENRE-SPECIFIC TIP:** [Advice tailored to the apparent genre/style]
+
+## 🎪 **CREATIVE EXPANSION IDEAS**
+• [3-4 creative suggestions for where to take the story next]
+• [Include specific scenes, character moments, or plot developments]
+• [Make each suggestion actionable and inspiring]
+
+Provide rich, detailed feedback that goes beyond surface-level corrections. Be encouraging but honest, and give the writer concrete tools to improve their craft!`;
         
-        console.log(`🤖 Invoking AI model for PERSONALIZED suggestions...`);
+        console.log(`🤖 Invoking AI model for ENHANCED FAST suggestions with emojis...`);
         const response = await Promise.race([
           this.model!.invoke(prompt),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Quality timeout')), 15000)) // 15 second max for quality results
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Enhanced suggestion timeout')), 20000)) // 20 seconds for quality detailed results
         ]) as any;
         
         const suggestions = response.content as string;
-        console.log(`✅ PERSONALIZED AI suggestions generated`);
+        console.log(`✅ ENHANCED FAST MODE suggestions generated with emojis and details`);
         
-        // No caching for fast mode - always fresh results
+        // IMPORTANT: NO CACHING for fast mode - always fresh, unique results
+        console.log(`🚫 Fast mode: Skipping cache to ensure fresh, unique suggestions every time`);
         return suggestions;
       }
       
@@ -700,7 +738,7 @@ Provide specific, implementable advice that will help the writer create more eng
           console.log(`⚠️ Deep search failed, falling back to fast mode`);
         }
       } else {
-        console.log(`⚡ FAST MODE: Using direct project context for theme analysis (no embedding search)`);
+        console.log(`⚡ ENHANCED FAST MODE: Using direct context for detailed theme analysis with emojis`);
       }
       
       const analysis = this.analyzeWriting(text);
@@ -711,52 +749,89 @@ Provide specific, implementable advice that will help the writer create more eng
         t.toLowerCase().includes(theme.toLowerCase()) || theme.toLowerCase().includes(t.toLowerCase())
       );
       
-      // Build enhanced theme analysis prompt with rich context
-      const prompt = this.buildEnhancedPrompt({
-        context: text,
-        projectId: projectId || 'unknown',
-        projectContext,
-        projectStats,
-        projectFullContent,
-        relevantChunks,
-        memory: null, // Theme analysis doesn't need conversation memory
-        analysis,
-        analysisMode,
-        requestType: `theme consistency analysis for "${theme}"`
-      }) + `
-        
-        THEME TO ANALYZE: "${theme}"
-        THEME EXISTS IN PROJECT: ${themeExistsInProject ? 'Yes' : 'No'}
-        THEME APPEARS IN CURRENT TEXT: ${text.toLowerCase().includes(theme.toLowerCase()) ? 'Yes' : 'No'}
-        
-        Please provide a detailed theme analysis with this structure:
-        
-        ## 🎯 THEME CONSISTENCY ANALYSIS: "${theme.toUpperCase()}"
-        
-        **Theme Presence Score**: [Rate 1-10 how well the theme appears]
-        
-        **Current Expression**:
-        - How the theme currently manifests in the text
-        - Specific examples of where it appears
-        - Strength of thematic elements
-        
-        **Consistency Issues**:
-        - Areas where the theme could be stronger
-        - Inconsistencies or missed opportunities
-        - Character actions/dialogue that could better reflect the theme
-        
-        **Enhancement Strategies**:
-        1. **Character Development**: How characters can better embody this theme
-        2. **Plot Integration**: Ways to weave the theme into plot events
-        3. **Symbolic Elements**: Objects, settings, or imagery that reinforce the theme
-        4. **Dialogue Opportunities**: Conversations that could explore the theme
-        
-        **Specific Recommendations**:
-        Provide 3-4 concrete, actionable suggestions with examples.
-        
-        **Thematic Resonance**:
-        Explain how this theme connects to universal human experiences.
-      `;
+      // Enhanced theme analysis prompt with comprehensive structure and emojis
+      const prompt = `You are a master literary analyst and theme expert. Conduct a comprehensive analysis of how the theme "${theme}" is expressed, developed, and could be enhanced in this text.
+
+📁 **PROJECT CONTEXT:**
+${projectContext ? `
+• Project Themes: ${projectContext.themes?.join(', ') || 'None identified'}
+• Main Characters: ${projectContext.characters?.join(', ') || 'None identified'}
+• Writing Style: ${projectContext.writingStyle || 'Not specified'}
+• Tone Analysis: ${projectContext.toneAnalysis || 'Not available'}` : '• No project context available'}
+
+🎯 **THEME TO ANALYZE:** "${theme}"
+📈 **Theme Status:** ${themeExistsInProject ? '✅ Present in project' : '🆕 New to project'}
+🔍 **Current Text:** ${text.toLowerCase().includes(theme.toLowerCase()) ? '✅ Theme referenced' : '⚠️ Theme not directly mentioned'}
+
+📜 **TEXT TO ANALYZE:**
+"${text}"
+
+🎯 **COMPREHENSIVE THEME ANALYSIS**
+
+Provide your analysis in this EXACT format with emojis:
+
+## 🎆 **THEME CONSISTENCY ANALYSIS: "${theme.toUpperCase()}"**
+
+### 📉 **Theme Presence Score: [X/10]**
+[Explain your numerical rating and reasoning]
+
+### 🔍 **Current Expression Analysis**
+
+**🎯 How the theme manifests:**
+• [Specific examples where the theme appears]
+• [Character actions that reflect the theme]
+• [Dialogue or narrative elements that express the theme]
+
+**💪 Strength of thematic elements:**
+• [What's working well thematically]
+• [Areas where the theme shines through clearly]
+
+### ⚠️ **Consistency Issues & Opportunities**
+
+**🔴 Areas needing improvement:**
+• [Specific places where theme could be stronger]
+• [Missed opportunities for thematic development]
+• [Character actions that contradict the theme]
+
+**💡 Enhancement opportunities:**
+• [Places to weave theme more naturally]
+• [Dialogue that could explore the theme deeper]
+
+### 🚀 **Strategic Enhancement Plan**
+
+**1. 👥 Character Development Strategy:**
+[How characters can better embody this theme - be specific]
+
+**2. 📈 Plot Integration Method:**
+[Concrete ways to weave theme into story events]
+
+**3. 🎨 Symbolic & Imagery Enhancements:**
+[Objects, settings, metaphors that reinforce the theme]
+
+**4. 🗣️ Dialogue & Voice Opportunities:**
+[Specific conversations or internal thoughts that explore theme]
+
+### 🌟 **Actionable Recommendations**
+
+**🎯 Priority Fix #1:** [Most important thematic improvement]
+**Example:** [Show exactly how to implement this]
+
+**🚀 Enhancement #2:** [Second most impactful change]
+**Example:** [Concrete implementation example]
+
+**✨ Creative Addition #3:** [Innovative way to express theme]
+**Example:** [Specific scene or moment suggestion]
+
+**🕰 Subtle Integration #4:** [Understated way to reinforce theme]
+**Example:** [Show don't tell approach]
+
+### 🌍 **Universal Resonance**
+[Explain how this theme connects to universal human experiences and why readers will relate to it. Make it inspiring and meaningful.]
+
+### 🔮 **Future Development**
+[2-3 suggestions for how this theme could evolve throughout the larger work]
+
+Provide detailed, inspiring analysis that helps the writer see new possibilities for thematic depth!`;
 
       const response = await trackAICall(
         () => this.callWithTimeout(this.model.invoke(prompt), 'Theme Analysis'),

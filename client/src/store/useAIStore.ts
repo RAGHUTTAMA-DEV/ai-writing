@@ -49,6 +49,12 @@ export const useAIStore = create<AIState>()(
           set({ loading: true, error: null });
           console.log(`🎯 AI Store: Generating suggestions in ${analysisMode} mode`);
           
+          // Clear previous suggestions to ensure fresh results
+          if (analysisMode === 'fast') {
+            console.log('🧹 Fast mode: Clearing previous suggestions for fresh results');
+            set({ suggestions: [] });
+          }
+          
           // Add timeout to prevent stuck loading state
           const timeoutId = setTimeout(() => {
             console.warn('AI suggestions request timed out');
@@ -79,6 +85,13 @@ export const useAIStore = create<AIState>()(
         try {
           set({ loading: true, error: null });
           console.log(`🎯 AI Store: Analyzing theme consistency in ${analysisMode} mode`);
+          
+          // Clear previous theme analysis to ensure fresh results
+          if (analysisMode === 'fast') {
+            console.log('🧹 Fast mode: Clearing previous theme analysis for fresh results');
+            set({ themeAnalysis: [] });
+          }
+          
           const response = await apiService.analyzeThemeConsistency(text, theme, projectId, analysisMode);
           console.log(`✅ AI Store: Theme analysis completed (${response.analysisMode || analysisMode} mode)`);
           set(state => ({
