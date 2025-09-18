@@ -10,6 +10,7 @@
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:studio": "npx prisma studio",
+    "build:production": "npx prisma generate && tsc",
     "test": "jest",
     "init": "node init-project.js",
     "check-env": "node check-env.js"
