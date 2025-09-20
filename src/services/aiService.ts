@@ -338,6 +338,16 @@ ${themeInfo}
 4. **Structure**: Improve sentence structure and pacing
 5. **Engagement**: Make it more engaging and compelling
 6. **Consistency**: Maintain consistency with the project context (if provided)
+7. **Visual Enhancement**: Add emojis and formatting for better readability
+
+**FORMATTING INSTRUCTIONS:**
+- Add relevant emojis (📚, ✨, 💡, 🎯, etc.) to enhance readability
+- Make chapter titles **bold** and add appropriate emojis
+- Highlight important concepts with **bold text**
+- Use emojis to break up sections and add visual interest
+- Add emojis for emotions, actions, or key themes
+- Make dialogue more expressive with relevant emojis
+- Use formatting to create visual hierarchy
 
 **CRITICAL INSTRUCTIONS:**
 - Return ONLY the improved version of the text
@@ -346,8 +356,9 @@ ${themeInfo}
 - Just the enhanced text that directly replaces the original
 - Maintain the same general length (don't make it significantly longer or shorter)
 - Keep the same perspective, tense, and narrative voice
-- If it's dialogue, maintain character voice
-- If it's description, enhance imagery and atmosphere
+- If it's dialogue, maintain character voice but add expressive emojis
+- If it's description, enhance imagery and atmosphere with emojis and bold formatting
+- Add emojis that match the tone and content of the writing
 
 Enhanced version:`;
 
