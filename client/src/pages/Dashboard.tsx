@@ -105,7 +105,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
     switch (activeTab) {
       case 'editor':
         return (
-          <div className="h-full">
+          <div className={`h-full ${isFullScreenMode ? 'overflow-hidden' : ''}`}>
             <CopilotEditor
               initialContent={activeProject.content || ''}
               onSave={handleSave}
@@ -167,16 +167,25 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
   // Show notification when entering full-screen mode
   useEffect(() => {
     if (isFullScreenMode) {
+      // Show notification
       setShowFullScreenNotification(true);
       const timer = setTimeout(() => {
         setShowFullScreenNotification(false);
       }, 4000); // Hide after 4 seconds
-      return () => clearTimeout(timer);
+      
+      // Disable body scrolling in full-screen mode
+      document.body.style.overflow = 'hidden';
+      
+      return () => {
+        clearTimeout(timer);
+        // Re-enable scrolling when exiting full-screen
+        document.body.style.overflow = '';
+      };
     }
   }, [isFullScreenMode]);
 
   return (
-    <div className="min-h-screen flex bg-gray-50">
+    <div className={`min-h-screen flex bg-gray-50 ${isFullScreenMode ? 'overflow-hidden' : ''}`}>
       {/* Mobile Sidebar Overlay */}
       {!isSidebarCollapsed && (
         <div 
@@ -354,17 +363,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
           <button
             onClick={() => setIsFullScreenMode(false)}
             className="
-              fixed bottom-4 right-4 z-50 p-3 sm:p-2 bg-red-600/90 hover:bg-red-700 border border-red-500 
-              text-white backdrop-blur-sm shadow-xl rounded-full transition-all duration-200 
-              hover:shadow-2xl hover:scale-110 group animate-bounce hover:animate-none
+              fixed bottom-4 right-4 z-50 p-3 sm:p-2 bg-white/80 hover:bg-white border border-gray-200
+              backdrop-blur-sm shadow-lg rounded-full transition-all duration-200 
+              hover:shadow-xl group
               touch-manipulation min-w-[3rem] min-h-[3rem] sm:min-w-0 sm:min-h-0
             "
             title="Exit full-screen mode"
           >
             <Icon 
-              name="x" 
+              name="minimize-2" 
               size="sm" 
-              className="text-white group-hover:text-red-100" 
+              className="text-gray-600 group-hover:text-gray-900" 
             />
           </button>
         )}

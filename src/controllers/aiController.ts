@@ -55,6 +55,39 @@ class AIController {
     const keyParts = [operation, contentHash, projectTimestamp, additionalParams].filter(Boolean);
     return keyParts.join(':');
   }
+
+  // Generate clean, actionable corrections
+  async generateCorrections(req: Request<{}, {}, { text: string; projectId?: string }>, res: Response): Promise<void> {
+    try {
+      const { text, projectId } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!text || text.trim().length === 0) {
+        res.status(400).json({ 
+          message: 'Text is required' 
+        });
+        return;
+      }
+
+      console.log(`🔧 Generating clean corrections for text length: ${text.length}`);
+
+      // Generate corrections
+      const result = await aiService.generateCleanCorrections(text, projectId, userId);
+
+      res.json({
+        message: 'Corrections generated successfully',
+        corrections: result.corrections,
+        overallFeedback: result.overallFeedback,
+        hasCorrections: result.corrections.length > 0
+      });
+    } catch (error) {
+      console.error('Error generating corrections:', error);
+      res.status(500).json({ 
+        message: 'Server error while generating corrections' 
+      });
+    }
+  }
+  
   // Generate autocomplete suggestions (Copilot-like feature)
   async generateAutocomplete(req: Request<{}, {}, { text: string; cursorPosition: number; projectId?: string }>, res: Response): Promise<void> {
     try {

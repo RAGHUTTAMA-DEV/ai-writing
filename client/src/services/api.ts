@@ -85,6 +85,22 @@ interface MotivationStakesResponse {
   analysisMode?: 'fast' | 'deep';
 }
 
+interface Correction {
+  type: 'spelling' | 'grammar' | 'style' | 'clarity';
+  original: string;
+  corrected: string;
+  startIndex: number;
+  endIndex: number;
+  reason: string;
+}
+
+interface CorrectionsResponse {
+  message: string;
+  corrections: Correction[];
+  overallFeedback?: string;
+  hasCorrections: boolean;
+}
+
 interface RAGAddProjectResponse {
   message: string;
 }
@@ -217,6 +233,18 @@ class APIService {
   }
 
   // AI endpoints
+  // Generate clean corrections with apply functionality
+  async generateCorrections(text: string, projectId?: string): Promise<CorrectionsResponse> {
+    return this.request<CorrectionsResponse>('/ai/corrections', {
+      method: 'POST',
+      body: JSON.stringify({
+        text,
+        projectId
+      })
+    });
+  }
+
+  // Generate AI suggestions
   async generateAISuggestions(projectId: string, context: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<AISuggestionResponse> {
     return this.request<AISuggestionResponse>('/ai/suggestions', {
       method: 'POST',

@@ -161,6 +161,124 @@ export class AIService {
         return '';
       }
     }
+
+  // NEW: Generate clean, actionable corrections with apply functionality
+  async generateCleanCorrections(
+    text: string,
+    projectId?: string,
+    userId?: string
+  ): Promise<{
+    corrections: Array<{
+      type: 'spelling' | 'grammar' | 'style' | 'clarity';
+      original: string;
+      corrected: string;
+      startIndex: number;
+      endIndex: number;
+      reason: string;
+    }>;
+    overallFeedback?: string;
+  }> {
+    try {
+      if (!this.model) {
+        throw new Error('AI model not available');
+      }
+
+      console.log(`🔧 Generating clean corrections for text`);
+      
+      // Focused prompt for clean corrections
+      const prompt = `You are a professional editor. Analyze this text and provide ONLY specific, actionable corrections that can be directly applied.
+
+TEXT TO ANALYZE:
+"${text}"
+
+Instructions:
+1. Find specific spelling, grammar, style, and clarity issues
+2. For each issue, provide the EXACT original text and the EXACT corrected version
+3. Give a brief reason for each correction
+4. Focus on corrections that can be directly applied, not general advice
+
+Return your response in this EXACT JSON format:
+
+{
+  "corrections": [
+    {
+      "type": "spelling|grammar|style|clarity",
+      "original": "exact text to replace",
+      "corrected": "exact replacement text", 
+      "reason": "brief explanation"
+    }
+  ],
+  "overallFeedback": "One sentence overall assessment (optional)"
+}
+
+IMPORTANT: 
+- Only include corrections where you can provide EXACT before/after text
+- Don't include general suggestions or advice
+- Focus on specific, implementable fixes
+- If no corrections are needed, return empty corrections array`;
+
+      const response = await Promise.race([
+        this.model!.invoke(prompt),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Corrections timeout')), 15000))
+      ]) as any;
+      
+      const responseText = response.content as string;
+      
+      try {
+        // Try to parse JSON response
+        const parsed = JSON.parse(responseText);
+        
+        // Add position information for each correction
+        const correctionsWithPositions = parsed.corrections?.map((correction: any) => {
+          const startIndex = text.indexOf(correction.original);
+          const endIndex = startIndex + correction.original.length;
+          
+          return {
+            ...correction,
+            startIndex: startIndex >= 0 ? startIndex : -1,
+            endIndex: startIndex >= 0 ? endIndex : -1
+          };
+        }).filter((correction: any) => correction.startIndex >= 0) || [];
+        
+        return {
+          corrections: correctionsWithPositions,
+          overallFeedback: parsed.overallFeedback
+        };
+      } catch (parseError) {
+        console.error('Failed to parse corrections JSON, falling back to text parsing');
+        
+        // Fallback: try to extract corrections from text
+        const corrections: any[] = [];
+        
+        // Look for simple patterns like "nside" -> "Inside"
+        const lines = responseText.split('\n');
+        for (const line of lines) {
+          const match = line.match(/["']([^"']+)["']\s*(?:->|should be|to)\s*["']([^"']+)["']/);
+          if (match) {
+            const original = match[1];
+            const corrected = match[2];
+            const startIndex = text.indexOf(original);
+            
+            if (startIndex >= 0) {
+              corrections.push({
+                type: 'correction',
+                original,
+                corrected,
+                startIndex,
+                endIndex: startIndex + original.length,
+                reason: 'Text correction'
+              });
+            }
+          }
+        }
+        
+        return { corrections };
+      }
+    } catch (error) {
+      console.error('Error generating clean corrections:', error);
+      return { corrections: [] };
+    }
+  }
     
     // Super fast and simple autocomplete suggestion method
     private async generateFastAutocompleteSuggestion(
