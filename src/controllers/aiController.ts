@@ -87,6 +87,60 @@ class AIController {
       });
     }
   }
+
+  // Generate better version of text with context awareness
+  async generateBetterVersion(req: Request<{}, {}, { text: string; projectId?: string }>, res: Response): Promise<void> {
+    try {
+      const { text, projectId } = req.body;
+      const userId = (req as any).user?.id;
+
+      if (!text || text.trim().length === 0) {
+        res.status(400).json({ 
+          message: 'Text is required' 
+        });
+        return;
+      }
+
+      console.log(`✨ Generating better version for text length: ${text.length}`);
+
+      // Create cache key for better version requests
+      const cacheKey = await this.createContentAwareCacheKey(
+        'better-version', 
+        text, 
+        projectId || '', 
+        projectId
+      );
+
+      // Check cache first (valid for 10 minutes for better versions)
+      const cached = aiResponseCache.get(cacheKey);
+      if (cached) {
+        console.log('📋 Returning cached better version');
+        res.json({
+          message: 'Better version generated successfully',
+          improvedText: cached,
+          fromCache: true
+        });
+        return;
+      }
+
+      // Generate better version using AI service
+      const betterVersion = await aiService.generateBetterVersion(text, projectId, userId);
+
+      // Cache the result
+      aiResponseCache.set(cacheKey, betterVersion);
+
+      res.json({
+        message: 'Better version generated successfully',
+        improvedText: betterVersion,
+        fromCache: false
+      });
+    } catch (error) {
+      console.error('Error generating better version:', error);
+      res.status(500).json({ 
+        message: 'Server error while generating better version' 
+      });
+    }
+  }
   
   // Generate autocomplete suggestions (Copilot-like feature)
   async generateAutocomplete(req: Request<{}, {}, { text: string; cursorPosition: number; projectId?: string }>, res: Response): Promise<void> {

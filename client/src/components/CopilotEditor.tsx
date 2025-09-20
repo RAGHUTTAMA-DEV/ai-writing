@@ -1,7 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { Icon, LoadingIcon } from "@/components/ui/icon";
 import { AILoadingState } from "@/components/ui/performance-monitor";
-import { CorrectionPanel } from "./CorrectionPanel";
 import apiService from '../services/api';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
@@ -24,15 +23,7 @@ interface AISuggestion {
   type: 'summary' | 'correction' | 'suggestion' | 'general';
   text: string;
   label: string;
-}
-
-interface Correction {
-  type: 'spelling' | 'grammar' | 'style' | 'clarity';
-  original: string;
-  corrected: string;
-  startIndex: number;
-  endIndex: number;
-  reason: string;
+  action?: () => void;
 }
 
 export const CopilotEditor: React.FC<CopilotEditorProps> = ({ 
@@ -58,12 +49,6 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     isProcessing: false,
     suggestions: [] as AISuggestion[]
   });
-  
-  // Correction Panel state
-  const [correctionPanel, setCorrectionPanel] = useState({
-    isOpen: false
-  });
-  
   const [showStatusBar, setShowStatusBar] = useState(false);
   const [isTyping, setIsTyping] = useState(false);
   
@@ -224,25 +209,18 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       return;
     }
 
-    // Ctrl+Shift+C to open correction panel
-    if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === 'C') {
+    // Ctrl+M to make it better
+    if ((e.ctrlKey || e.metaKey) && e.key === 'm') {
       e.preventDefault();
-      openCorrectionPanel();
+      makeTextBetter();
       return;
     }
 
-    // Escape to close AI assistant or correction panel
-    if (e.key === 'Escape') {
-      if (aiAssistant.isOpen) {
-        e.preventDefault();
-        closeAIAssistant();
-        return;
-      }
-      if (correctionPanel.isOpen) {
-        e.preventDefault();
-        closeCorrectionPanel();
-        return;
-      }
+    // Escape to close AI assistant
+    if (e.key === 'Escape' && aiAssistant.isOpen) {
+      e.preventDefault();
+      closeAIAssistant();
+      return;
     }
 
     if (e.key === 'Tab' && suggestion && showSuggestion) {
@@ -350,34 +328,79 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     setAiAssistant(prev => ({ ...prev, isOpen: false, query: '', suggestions: [], isProcessing: false }));
   };
 
-  // Correction Panel Functions
-  const openCorrectionPanel = () => {
-    setCorrectionPanel({ isOpen: true });
-  };
-
-  const closeCorrectionPanel = () => {
-    setCorrectionPanel({ isOpen: false });
-  };
-
-  const applyCorrection = (correction: Correction) => {
-    if (!textareaRef.current) return;
+  // Make it Better function - shows improved version in AI panel with apply option
+  const makeTextBetter = async () => {
+    if (!projectId) return;
     
-    const textarea = textareaRef.current;
-    const beforeCorrection = content.substring(0, correction.startIndex);
-    const afterCorrection = content.substring(correction.endIndex);
-    const newContent = beforeCorrection + correction.corrected + afterCorrection;
+    const fullText = content.trim();
     
-    setContent(newContent);
-    onChange(newContent);
+    if (!fullText) {
+      alert('No content to improve');
+      return;
+    }
     
-    // Position cursor after the correction
-    const newCursorPos = correction.startIndex + correction.corrected.length;
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.setSelectionRange(newCursorPos, newCursorPos);
-        textareaRef.current.focus();
+    // Open AI panel and start processing
+    setAiAssistant({
+      isOpen: true,
+      selectedText: '',
+      selectionStart: 0,
+      selectionEnd: 0,
+      query: 'Make it Better',
+      isProcessing: true,
+      suggestions: []
+    });
+    
+    // Generate improved version
+    try {
+      const response = await apiService.generateBetterVersion(fullText, projectId);
+      const improvedText = response.improvedText?.trim() || fullText;
+      
+      if (improvedText && improvedText !== fullText) {
+        // Show the improved version with apply option
+        setAiAssistant(prev => ({ 
+          ...prev, 
+          isProcessing: false,
+          suggestions: [{
+            type: 'suggestion',
+            text: improvedText,
+            label: 'Apply Improved Version',
+            action: () => {
+              // Apply the improvement
+              setContent(improvedText);
+              onChange(improvedText);
+              setTimeout(() => {
+                if (textareaRef.current) {
+                  textareaRef.current.setSelectionRange(0, 0);
+                  textareaRef.current.focus();
+                }
+              }, 0);
+              setAiAssistant(prev => ({ ...prev, isOpen: false }));
+            }
+          }]
+        }));
+      } else {
+        setAiAssistant(prev => ({ 
+          ...prev, 
+          isProcessing: false,
+          suggestions: [{
+            type: 'summary',
+            text: 'Your project is already excellently written!',
+            label: 'No improvements needed'
+          }]
+        }));
       }
-    }, 0);
+    } catch (error) {
+      console.error('Make it better failed:', error);
+      setAiAssistant(prev => ({ 
+        ...prev, 
+        isProcessing: false,
+        suggestions: [{
+          type: 'summary',
+          text: 'Error improving your project. Please try again.',
+          label: 'Error'
+        }]
+      }));
+    }
   };
   
 
@@ -498,6 +521,12 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     
     if (!textareaRef.current) {
       console.log('No textarea ref');
+      return;
+    }
+    
+    // If suggestion has a custom action, use it
+    if (suggestion.action) {
+      suggestion.action();
       return;
     }
     
@@ -671,17 +700,17 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
         </button>
         
         <button
-          onClick={openCorrectionPanel}
+          onClick={makeTextBetter}
           className={`
-            bg-gradient-to-r from-blue-500 to-green-500 hover:from-blue-600 hover:to-green-600 text-white 
+            bg-gradient-to-r from-purple-500 to-blue-500 hover:from-purple-600 hover:to-blue-600 text-white 
             ${isFullScreen ? 'p-2' : 'px-4 py-2.5'} rounded-full shadow-lg hover:shadow-xl 
             transition-all duration-200 transform hover:scale-105 flex items-center space-x-2 group border-2 border-white
             ${isFullScreen ? 'opacity-70 hover:opacity-100' : ''}
           `}
-          title="Check & Fix Text (Ctrl+Shift+C)"
+          title="Make it Better (Ctrl+M)"
         >
-          <Icon name="check-circle" size="sm" className="text-white group-hover:animate-pulse" />
-          {!isFullScreen && <span className="text-sm font-medium hidden sm:block">Fix Text</span>}
+          <Icon name="zap" size="sm" className="text-white group-hover:animate-pulse" />
+          {!isFullScreen && <span className="text-sm font-medium hidden sm:block">Make Better</span>}
         </button>
       </div>
       
@@ -912,23 +941,26 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
                         <h4 className="font-medium text-gray-900 mb-3 mt-6 sticky top-0 bg-white py-2 border-b border-gray-100">Writing Suggestions:</h4>
                         <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
                           {aiAssistant.suggestions.filter(s => s.type === 'suggestion').map((suggestion, index) => (
-                            <div key={`suggestion-${index}`} className="border border-gray-200 rounded-xl p-4 bg-white hover:border-blue-300 transition-colors hover:shadow-sm">
+                            <div key={`suggestion-${index}`} className="border border-gray-200 rounded-xl p-4 bg-white hover:border-blue-300 transition-colors hover:shadow-sm group">
                               <div className="flex items-start justify-between">
-                                <div className="flex-1">
+                                <div className={`flex-1 ${suggestion.action ? 'pr-4' : ''}`}>
                                   <div className="flex items-center space-x-2 mb-2">
                                     <Icon 
                                       name={suggestion.label === 'Pro Tips' ? 'star' : 
                                            suggestion.label === 'Creative Ideas' ? 'sparkles' : 
+                                           suggestion.action ? 'zap' :
                                            'lightbulb'} 
                                       size="sm" 
                                       className={suggestion.label === 'Pro Tips' ? 'text-purple-600' : 
                                                 suggestion.label === 'Creative Ideas' ? 'text-rose-500' : 
+                                                suggestion.action ? 'text-blue-600' :
                                                 'text-amber-600'} 
                                     />
                                     <span 
                                       className={`text-sm font-medium ${
                                         suggestion.label === 'Pro Tips' ? 'text-purple-700' : 
                                         suggestion.label === 'Creative Ideas' ? 'text-rose-600' : 
+                                        suggestion.action ? 'text-blue-700' :
                                         'text-amber-700'
                                       }`}
                                     >
@@ -941,6 +973,14 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
                                     </ReactMarkdown>
                                   </div>
                                 </div>
+                                {suggestion.action && (
+                                  <button
+                                    onClick={() => applySuggestion(suggestion)}
+                                    className="px-4 py-2 text-white rounded-lg text-sm font-medium transition-colors opacity-0 group-hover:opacity-100 bg-blue-600 hover:bg-blue-700"
+                                  >
+                                    Apply
+                                  </button>
+                                )}
                               </div>
                             </div>
                           ))}
@@ -971,7 +1011,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
             <div className="flex items-center space-x-4 lg:space-x-6 text-xs text-gray-500">
               <div className="hidden lg:flex items-center space-x-1.5">
                 <Icon name="zap" size="xs" className="text-amber-500" />
-                <span>AI assists after pause • Ctrl+K for AI help • Ctrl+Shift+C to check text</span>
+                <span>AI assists after pause • Ctrl+K for AI help • Ctrl+M to make better</span>
               </div>
               <div className="flex items-center space-x-1.5">
                 <kbd className="px-2 py-1 bg-gray-100 rounded text-xs font-mono border">⌘S</kbd>
@@ -988,19 +1028,10 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
           <div className="bg-white/90 backdrop-blur-sm border border-gray-200 rounded-lg px-4 py-2 shadow-lg text-sm text-gray-600">
             <span className="font-medium">{wordCount} words</span>
             <span className="mx-2 text-gray-400">•</span>
-            <span>Ctrl+K for AI • Ctrl+Shift+C to fix</span>
+            <span>Ctrl+K for AI • Ctrl+M to make better</span>
           </div>
         </div>
       )}
-      
-      {/* Correction Panel */}
-      <CorrectionPanel
-        text={content}
-        onApplyCorrection={applyCorrection}
-        projectId={projectId}
-        isVisible={correctionPanel.isOpen}
-        onClose={closeCorrectionPanel}
-      />
       </div>
     </>
   );

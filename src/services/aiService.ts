@@ -279,6 +279,108 @@ IMPORTANT:
       return { corrections: [] };
     }
   }
+
+  // Generate better version with context awareness (like themes analysis)
+  async generateBetterVersion(
+    text: string,
+    projectId?: string,
+    userId?: string
+  ): Promise<string> {
+    try {
+      console.log('🎯 Generating better version with enhanced context awareness');
+
+      // Get project context if available
+      let projectContext = null;
+      let themeInfo = '';
+      
+      if (projectId && userId) {
+        try {
+          const project = await prisma.project.findFirst({
+            where: { 
+              id: projectId,
+              ownerId: userId 
+            },
+            select: {
+              title: true,
+              description: true,
+              content: true
+            }
+          });
+          
+          if (project) {
+            projectContext = project;
+            // Extract theme information from project content
+            const fullContent = project.content || '';
+            if (fullContent.length > 0) {
+              themeInfo = `\n\nPROJECT CONTEXT:
+Title: ${project.title || 'Untitled'}
+Description: ${project.description || 'No description'}
+Full project length: ${fullContent.length} characters
+
+Recent context from project: "${fullContent.slice(-800)}"`;
+            }
+          }
+        } catch (error) {
+          console.warn('Could not fetch project context for better version');
+        }
+      }
+
+      const prompt = `You are a world-class editor and writing expert. Your task is to dramatically improve the given text while maintaining its core meaning and intent.
+
+**TEXT TO IMPROVE:**
+"${text}"
+${themeInfo}
+
+**IMPROVEMENT GUIDELINES:**
+1. **Clarity & Flow**: Make the text clearer and smoother
+2. **Style & Voice**: Enhance the writing style while keeping the original voice
+3. **Word Choice**: Use more precise, impactful words
+4. **Structure**: Improve sentence structure and pacing
+5. **Engagement**: Make it more engaging and compelling
+6. **Consistency**: Maintain consistency with the project context (if provided)
+
+**CRITICAL INSTRUCTIONS:**
+- Return ONLY the improved version of the text
+- NO explanations, NO quotes, NO analysis
+- NO prefixes like "Here's the improved version:" or "Enhanced text:"
+- Just the enhanced text that directly replaces the original
+- Maintain the same general length (don't make it significantly longer or shorter)
+- Keep the same perspective, tense, and narrative voice
+- If it's dialogue, maintain character voice
+- If it's description, enhance imagery and atmosphere
+
+Enhanced version:`;
+
+      const response = await Promise.race([
+        this.model!.invoke(prompt),
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Better version timeout')), 20000))
+      ]) as any;
+      
+      const responseText = response.content as string;
+      
+      // Clean up the response
+      let cleanedText = responseText.trim()
+        .replace(/^(Enhanced version:|Improved version:|Here's the improved version:|Better version:|.*?:)/i, '')
+        .replace(/^["']|["']$/g, '')
+        .trim();
+      
+      // If response is too similar to original or too different, return original
+      if (cleanedText.length < text.length * 0.5 || cleanedText.length > text.length * 2) {
+        console.warn('Better version response seems invalid, returning original');
+        return text;
+      }
+      
+      if (cleanedText && cleanedText !== text) {
+        console.log(`✨ Better version generated: ${text.length} -> ${cleanedText.length} chars`);
+        return cleanedText;
+      } else {
+        return text;
+      }
+    } catch (error) {
+      console.error('Error generating better version:', error);
+      return text;
+    }
+  }
     
     // Super fast and simple autocomplete suggestion method
     private async generateFastAutocompleteSuggestion(

@@ -22,6 +22,11 @@ router.post('/corrections', (req, res, next) => {
   AIController.generateCorrections(req, res).catch(next);
 });
 
+// Generate better version of text
+router.post('/better-version', (req, res, next) => {
+  AIController.generateBetterVersion(req, res).catch(next);
+});
+
 // Theme consistency analysis
 router.post('/theme-consistency', (req, res, next) => {
   AIController.analyzeThemeConsistency(req, res).catch(next);

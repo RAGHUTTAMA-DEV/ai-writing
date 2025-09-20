@@ -244,6 +244,25 @@ class APIService {
     });
   }
 
+  // Generate better version of text
+  async generateBetterVersion(text: string, projectId?: string): Promise<{
+    message: string;
+    improvedText: string;
+    fromCache: boolean;
+  }> {
+    return this.request<{
+      message: string;
+      improvedText: string;
+      fromCache: boolean;
+    }>('/ai/better-version', {
+      method: 'POST',
+      body: JSON.stringify({
+        text,
+        projectId
+      })
+    });
+  }
+
   // Generate AI suggestions
   async generateAISuggestions(projectId: string, context: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<AISuggestionResponse> {
     return this.request<AISuggestionResponse>('/ai/suggestions', {
