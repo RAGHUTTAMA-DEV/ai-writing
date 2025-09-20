@@ -83,15 +83,15 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
         
         // Convert summary to basic structure analysis format
         const basicAnalysis: StructureAnalysis = {
-          totalWordCount: response.wordCount || 0,
-          suggestedChapterCount: response.suggestedChapters || 0,
-          suggestedSceneCount: response.estimatedScenes || 0,
+          totalWordCount: response.summary.wordCount || 0,
+          suggestedChapterCount: response.summary.suggestedChapters || 0,
+          suggestedSceneCount: response.summary.estimatedScenes || 0,
           chapters: [], // Summary doesn't include detailed chapters
-          overallThemes: response.themes || [],
-          mainCharacters: response.characters || [],
-          narrativeStructure: response.genre || 'Unknown structure',
+          overallThemes: response.summary.themes || [],
+          mainCharacters: response.summary.characters || [],
+          narrativeStructure: response.summary.genre || 'Unknown structure',
           pacing: 'Analysis needed',
-          recommendations: response.recommendations || []
+          recommendations: response.summary.recommendations || []
         };
         
         setStructureAnalysis(basicAnalysis);
