@@ -22,13 +22,20 @@ export const getPersonalizedSuggestions = async (req: Request, res: Response): P
       where: { userId }
     });
 
+    console.log('🤖 Generating personalized suggestions for context:', context.substring(0, 100));
+    console.log('🤖 User ID:', userId);
+    console.log('🤖 Project ID:', projectId);
+
     // Generate intelligent response using AI service
     const suggestions = await aiService.generateIntelligentResponse(
       context, 
       userId, 
-      projectId,
+      projectId && projectId !== 'default' ? projectId : undefined, // Only pass valid project IDs
       context
     );
+
+    console.log('🤖 AI response received, length:', suggestions?.length || 0);
+    console.log('🤖 AI response preview:', suggestions?.substring(0, 200) || 'No response');
 
     // Store the conversation in database
     let conversation = await prisma.chatConversation.findFirst({

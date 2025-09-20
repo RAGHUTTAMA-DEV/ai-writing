@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Icon, BrandIcon, LoadingIcon } from "@/components/ui/icon";
+import { Mail, User, Key, AlertCircle, UserPlus, Loader2, Sparkles } from "lucide-react";
 
 interface RegisterProps {
   onSwitchToLogin: () => void;
@@ -57,65 +57,67 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-4">
-      <Card className="w-full max-w-md shadow-strong animate-scale-in gradient-card border-border/50">
-        <CardHeader className="text-center pb-6">
-          <div className="flex justify-center mb-4">
-            <div className="p-3 gradient-primary rounded-2xl shadow-medium">
-              <BrandIcon size="xl" className="text-white" />
+      <Card className="w-full max-w-md shadow-2xl backdrop-blur-sm bg-white/95 border-0 animate-in slide-in-from-bottom-4 duration-300">
+        <CardHeader className="text-center pb-8 pt-8">
+          <div className="flex justify-center mb-6">
+            <div className="p-4 bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl shadow-lg transform hover:scale-105 transition-transform duration-200">
+              <Sparkles size={32} className="text-white" />
             </div>
           </div>
-          <CardTitle className="text-2xl font-bold text-gradient">Join Us Today</CardTitle>
-          <p className="text-muted-foreground font-medium mt-2">Create your AI Writing Platform account</p>
+          <CardTitle className="text-3xl font-bold bg-gradient-to-r from-blue-600 to-indigo-700 bg-clip-text text-transparent">
+            Join Us Today
+          </CardTitle>
+          <p className="text-slate-600 font-medium mt-3 text-base">Create your AI Writing Platform account</p>
         </CardHeader>
-        <CardContent className="px-6 pb-6">
-          <form onSubmit={handleSubmit} className="space-y-4">
+        <CardContent className="px-8 pb-8">
+          <form onSubmit={handleSubmit} className="space-y-6">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="firstName" className="text-sm font-semibold text-foreground">First Name</Label>
+                <Label htmlFor="firstName" className="text-sm font-semibold text-slate-700">First Name</Label>
                 <Input
                   id="firstName"
                   value={firstName}
                   onChange={handleFirstNameChange}
                   placeholder="John"
-                  className="h-11 border-border/60 focus:border-primary-solid transition-colors"
+                  className="h-12 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 rounded-lg"
                   required
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="lastName" className="text-sm font-semibold text-foreground">Last Name</Label>
+                <Label htmlFor="lastName" className="text-sm font-semibold text-slate-700">Last Name</Label>
                 <Input
                   id="lastName"
                   value={lastName}
                   onChange={handleLastNameChange}
                   placeholder="Doe"
-                  className="h-11 border-border/60 focus:border-primary-solid transition-colors"
+                  className="h-12 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 rounded-lg"
                   required
                 />
               </div>
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="username" className="text-sm font-semibold text-foreground">Username</Label>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                  <Icon name="user" variant="muted" size="sm" />
+              <Label htmlFor="username" className="text-sm font-semibold text-slate-700">Username</Label>
+              <div className="relative group">
+                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 transition-colors duration-200">
+                  <User size={18} className="text-slate-400 group-focus-within:text-blue-600" />
                 </div>
                 <Input
                   id="username"
                   value={username}
                   onChange={handleUsernameChange}
                   placeholder="Choose a username"
-                  className="pl-10 h-11 border-border/60 focus:border-primary-solid transition-colors"
+                  className="pl-10 h-12 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 rounded-lg"
                   required
                 />
               </div>
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm font-semibold text-foreground">Email Address</Label>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                  <Icon name="mail" variant="muted" size="sm" />
+              <Label htmlFor="email" className="text-sm font-semibold text-slate-700">Email Address</Label>
+              <div className="relative group">
+                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 transition-colors duration-200">
+                  <Mail size={18} className="text-slate-400 group-focus-within:text-blue-600" />
                 </div>
                 <Input
                   id="email"
@@ -123,17 +125,17 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
                   value={email}
                   onChange={handleEmailChange}
                   placeholder="Enter your email"
-                  className="pl-10 h-11 border-border/60 focus:border-primary-solid transition-colors"
+                  className="pl-10 h-12 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 rounded-lg"
                   required
                 />
               </div>
             </div>
             
             <div className="space-y-2">
-              <Label htmlFor="password" className="text-sm font-semibold text-foreground">Password</Label>
-              <div className="relative">
-                <div className="absolute left-3 top-1/2 transform -translate-y-1/2">
-                  <Icon name="key" variant="muted" size="sm" />
+              <Label htmlFor="password" className="text-sm font-semibold text-slate-700">Password</Label>
+              <div className="relative group">
+                <div className="absolute left-3 top-1/2 transform -translate-y-1/2 transition-colors duration-200">
+                  <Key size={18} className="text-slate-400 group-focus-within:text-blue-600" />
                 </div>
                 <Input
                   id="password"
@@ -141,44 +143,44 @@ export function Register({ onSwitchToLogin }: RegisterProps) {
                   value={password}
                   onChange={handlePasswordChange}
                   placeholder="Create a strong password"
-                  className="pl-10 h-11 border-border/60 focus:border-primary-solid transition-colors"
+                  className="pl-10 h-12 border-slate-200 focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 transition-all duration-200 rounded-lg"
                   required
                 />
               </div>
             </div>
             
             {error && (
-              <div className="flex items-center space-x-2 p-3 bg-destructive/10 border border-destructive/20 rounded-lg animate-fade-in">
-                <Icon name="alert-circle" variant="danger" size="sm" />
-                <p className="text-destructive text-sm font-medium">{error}</p>
+              <div className="flex items-center space-x-2 p-4 bg-red-50 border border-red-200 rounded-lg animate-in slide-in-from-top-2 duration-200">
+                <AlertCircle size={18} className="text-red-600 flex-shrink-0" />
+                <p className="text-red-700 text-sm font-medium">{error}</p>
               </div>
             )}
             
             <Button 
               type="submit" 
-              className="w-full h-12 gradient-primary font-semibold text-white shadow-medium hover:shadow-strong transition-all duration-300" 
+              className="w-full h-12 bg-gradient-to-r from-blue-600 to-indigo-700 hover:from-blue-700 hover:to-indigo-800 font-semibold text-white shadow-lg hover:shadow-xl transition-all duration-300 transform hover:-translate-y-0.5 rounded-lg" 
               disabled={loading}
             >
               {loading ? (
                 <div className="flex items-center space-x-2">
-                  <LoadingIcon className="text-white" />
+                  <Loader2 size={18} className="animate-spin" />
                   <span>Creating account...</span>
                 </div>
               ) : (
                 <div className="flex items-center space-x-2">
-                  <Icon name="user-plus" className="text-white" />
+                  <UserPlus size={18} />
                   <span>Create Account</span>
                 </div>
               )}
             </Button>
           </form>
-          <div className="mt-6 text-center">
-            <p className="text-sm text-muted-foreground">
+          <div className="mt-8 text-center">
+            <p className="text-sm text-slate-500">
               Already have an account?{' '}
               <Button 
                 variant="link" 
                 onClick={onSwitchToLogin} 
-                className="p-0 h-auto font-semibold text-primary-solid hover:text-primary-hover transition-colors"
+                className="p-0 h-auto font-semibold text-blue-600 hover:text-blue-700 transition-colors duration-200 underline-offset-4"
               >
                 Sign in here
               </Button>

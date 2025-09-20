@@ -15,7 +15,7 @@ interface ChatbotState {
   submitWritingFlowAnswers: (answers: Record<string, string>) => Promise<void>;
   getUserPreferences: () => Promise<void>;
   updateUserPreferences: (preferences: UserPreferences) => Promise<void>;
-  getPersonalizedSuggestions: (context: string, projectId?: string) => Promise<void>;
+  getPersonalizedSuggestions: (context: string, projectId?: string) => Promise<string>;
   setPreferences: (preferences: UserPreferences) => void;
   addSuggestion: (suggestion: string) => void;
   clearSuggestions: () => void;
@@ -105,17 +105,31 @@ export const useChatbotStore = create<ChatbotState>()((set) => ({
   getPersonalizedSuggestions: async (context: string, projectId?: string) => {
     try {
       set({ loading: true, error: null });
+      console.log('🤖 Requesting personalized suggestions with context:', context.substring(0, 100));
+      
       const response = await apiService.getPersonalizedSuggestions(context, projectId);
+      console.log('🤖 Received response:', response);
+      
+      if (!response || !response.suggestions) {
+        console.error('🤖 Invalid response received:', response);
+        throw new Error('Invalid response from server');
+      }
+      
       set({ 
         suggestions: [response.suggestions],
         loading: false 
       });
+      
+      console.log('🤖 Successfully stored suggestions in state');
+      return response.suggestions; // Return the suggestions directly
     } catch (error: any) {
-      console.error('Get personalized suggestions error:', error);
+      console.error('🤖 Get personalized suggestions error:', error);
+      const errorMessage = error.message || 'Failed to get personalized suggestions';
       set({ 
-        error: error.message || 'Failed to get personalized suggestions',
+        error: errorMessage,
         loading: false
       });
+      throw new Error(errorMessage); // Re-throw with a clean error message
     }
   },
 

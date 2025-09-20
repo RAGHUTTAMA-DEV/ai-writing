@@ -195,14 +195,22 @@ class ChatbotService {
         enrichedContext += recentHistory.map(h => `${h.type}: ${h.content.slice(0, 150)}...`).join('\n');
       }
       
-      enrichedContext += `\n\n[INSTRUCTION]\nBased on the user's preferences and their other projects' context above, provide a helpful, personalized response. If they reference "other projects" or "similar characters", use the project data provided to give specific examples and suggestions.`;
+      enrichedContext += `\n\n[INSTRUCTION]\nBased on the user's preferences and their other projects' context above, provide a helpful, personalized response. Focus on answering exactly what they asked for:
+      - If they ask for plot twists, provide creative plot twist ideas
+      - If they ask for character development, give character suggestions  
+      - If they ask for dialogue help, provide dialogue examples
+      - If they ask for themes, suggest relevant themes
+      - Always give direct, actionable advice that matches their request
 
-      // Use AI service's fast mode with enriched context
-      const response = await aiService.generateSuggestions(
-        enrichedContext,
-        projectId || 'default',
+      User's question: "${message}"
+      Please provide specific, helpful suggestions that directly address what they're asking for.`;
+
+      // Use AI service's intelligent response with the user's actual question as primary context
+      const response = await aiService.generateIntelligentResponse(
+        message, // Use the original message as the primary input
         userId,
-        'fast' // Use fast mode but with rich context
+        projectId,
+        enrichedContext // Pass enriched context as additional context
       );
 
       // Record the AI response
@@ -278,7 +286,15 @@ class ChatbotService {
         contextualPrompt += recentHistory.map(h => `${h.type}: ${h.content.slice(0, 100)}...`).join('\n');
       }
       
-      contextualPrompt += `\n\n[INSTRUCTION]\nBased on the user's writing preferences and their other projects' context above, provide a helpful, personalized answer. If they ask about "other projects" or "similar characters/themes", reference the specific project data provided. Be direct but informative, and tailor your response to their writing style and preferences.`;
+      contextualPrompt += `\n\n[INSTRUCTION]\nBased on the user's writing preferences and their other projects' context above, provide a helpful, personalized answer. Focus on answering exactly what they asked:
+      - If they ask for plot twists, provide specific plot twist ideas
+      - If they ask for character help, give character development suggestions
+      - If they ask for dialogue, provide dialogue examples  
+      - If they ask for themes, suggest relevant themes
+      - Always give direct, actionable advice that matches their specific question
+      
+      User's question: "${question}"
+      Please provide specific, helpful answers that directly address what they're asking for.`;
       
       // Record the interaction
       this.recordUserInteraction(userId, {
@@ -286,12 +302,12 @@ class ChatbotService {
         content: question
       });
 
-      // Use AI service fast mode for quick but contextual response
-      const answer = await aiService.generateSuggestions(
-        contextualPrompt,
-        projectId || 'default',
+      // Use AI service intelligent response for intent-aware answers
+      const answer = await aiService.generateIntelligentResponse(
+        question, // Use the original question as primary input
         userId,
-        'fast'
+        projectId,
+        contextualPrompt // Pass as additional context
       );
 
       // Record the response

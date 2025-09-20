@@ -27,7 +27,6 @@ interface ChatMessage {
 
 export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
   const {
-    suggestions: chatbotSuggestions,
     loading: chatbotLoading,
     error: chatbotError,
     getPersonalizedSuggestions,
@@ -83,7 +82,7 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
 
     try {
       // Get AI response
-      await getPersonalizedSuggestions(currentInput, projectId);
+      const aiResponse = await getPersonalizedSuggestions(currentInput, projectId);
       
       // Remove thinking indicator and add actual response
       setMessages(prev => {
@@ -91,7 +90,7 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
         const botResponse: ChatMessage = {
           id: (Date.now() + 1).toString(),
           role: 'bot',
-          content: chatbotSuggestions[chatbotSuggestions.length - 1] || 'I apologize, but I encountered an issue generating a response. Could you try rephrasing your question?',
+          content: aiResponse || 'I apologize, but I received an empty response. Could you try rephrasing your question?',
           timestamp: new Date()
         };
         return [...newMessages, botResponse];
@@ -138,7 +137,7 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
       // Sub-section headers (**TITLE**: or **TITLE**)
       if (trimmedLine.match(/^\*\*[^*]+\*\*:?\s*$/) || trimmedLine.match(/^\*\*[A-Z][^*]*\*\*$/)) {
         elements.push(
-          <h3 key={i} className="text-base font-semibold text-gray-800 mt-4 mb-2 text-purple-700">
+          <h3 key={i} className="text-base font-semibold mt-4 mb-2 text-purple-700">
             {trimmedLine.replace(/\*\*/g, '').replace(/:$/, '')}
           </h3>
         );

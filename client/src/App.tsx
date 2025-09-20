@@ -33,15 +33,13 @@ function App() {
 
   if (!isAuthenticated) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50 to-indigo-100 flex items-center justify-center p-2 sm:p-4">
-        <div className="w-full max-w-sm sm:max-w-md animate-fade-in">
-          {authView === 'login' ? (
-            <Login onSwitchToRegister={() => setAuthView('register')} />
-          ) : (
-            <Register onSwitchToLogin={() => setAuthView('login')} />
-          )}
-        </div>
-      </div>
+      <>
+        {authView === 'login' ? (
+          <Login onSwitchToRegister={() => setAuthView('register')} />
+        ) : (
+          <Register onSwitchToLogin={() => setAuthView('login')} />
+        )}
+      </>
     );
   }
 

@@ -98,13 +98,11 @@ const login = async (req: Request<{}, {}, LoginRequest>, res: Response): Promise
   try {
     const { email, password } = req.body;
 
-    // Validation
     if (!email || !password) {
       res.status(400).json({ message: 'Email and password are required' });
       return;
     }
 
-    // Find user
     const user = await prisma.user.findUnique({
       where: { email }
     });
@@ -114,7 +112,6 @@ const login = async (req: Request<{}, {}, LoginRequest>, res: Response): Promise
       return;
     }
 
-    // Check password (handle OAuth users who don't have passwords)
     if (!user.password) {
       res.status(401).json({ message: 'Please use Google sign-in for this account' });
       return;
@@ -137,7 +134,6 @@ const login = async (req: Request<{}, {}, LoginRequest>, res: Response): Promise
       jwtOptions
     );
 
-    // Update last login (optional)
     await prisma.user.update({
       where: { id: user.id },
       data: { updatedAt: new Date() }
@@ -165,8 +161,6 @@ const login = async (req: Request<{}, {}, LoginRequest>, res: Response): Promise
 
 const logout = async (req: Request, res: Response): Promise<void> => {
   try {
-    // In a stateless JWT approach, we don't need to do anything server-side
-    // But we can invalidate the token on the client side
     res.json({ message: 'Logout successful' });
   } catch (error) {
     console.error('Logout error:', error);
@@ -267,7 +261,6 @@ const googleCallback = (req: Request, res: Response): void => {
         jwtOptions
       );
 
-      // Redirect to frontend with token (you can customize this URL)
       const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
       res.redirect(`${frontendUrl}/auth/callback?token=${token}`);
     } catch (error) {

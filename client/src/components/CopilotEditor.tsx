@@ -675,6 +675,17 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     setContent(initialContent);
   }, [initialContent]);
 
+  // Simple markdown to HTML converter for preview
+  const formatMarkdownToHTML = (text: string): string => {
+    return text
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Bold: **text** -> <strong>text</strong>
+      .replace(/\*(.*?)\*/g, '<em>$1</em>') // Italic: *text* -> <em>text</em>
+      .replace(/\n/g, '<br/>'); // Line breaks
+  };
+
+  // State for showing formatted preview
+  const [showFormattedPreview, setShowFormattedPreview] = useState(false);
+
   const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
 
   return (
@@ -712,6 +723,23 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
           <Icon name="zap" size="sm" className="text-white group-hover:animate-pulse" />
           {!isFullScreen && <span className="text-sm font-medium hidden sm:block">Make Better</span>}
         </button>
+
+        <button
+          onClick={() => setShowFormattedPreview(!showFormattedPreview)}
+          className={`
+            ${showFormattedPreview 
+              ? 'bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600' 
+              : 'bg-gradient-to-r from-gray-500 to-gray-600 hover:from-gray-600 hover:to-gray-700'
+            } text-white 
+            ${isFullScreen ? 'p-2' : 'px-4 py-2.5'} rounded-full shadow-lg hover:shadow-xl 
+            transition-all duration-200 transform hover:scale-105 flex items-center space-x-2 group border-2 border-white
+            ${isFullScreen ? 'opacity-70 hover:opacity-100' : ''}
+          `}
+          title="Toggle Formatted Preview"
+        >
+          <Icon name="eye" size="sm" className="text-white group-hover:animate-pulse" />
+          {!isFullScreen && <span className="text-sm font-medium hidden sm:block">Preview</span>}
+        </button>
       </div>
       
       {/* Floating Status Indicators - Minimal and auto-hiding */}
@@ -748,30 +776,54 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
 
       {/* Full-screen Writing Area */}
       <div className="flex-1 relative">
-        <textarea
-          ref={textareaRef}
-          value={content}
-          onChange={handleChange}
-          onKeyDown={handleKeyDown}
-          onSelect={handleSelectionChange}
-          onMouseUp={handleSelectionChange}
-          className={`
-            w-full h-full border-0 resize-none outline-none bg-white text-gray-900 
-            placeholder-gray-400 focus:placeholder-gray-300 transition-all duration-300
-            ${isFullScreen 
-              ? 'px-8 py-12 md:px-16 md:py-16' 
-              : 'px-6 py-8 sm:px-8 sm:py-12 md:px-12 md:py-16 lg:px-20 lg:py-20'
-            }
-          `}
-          placeholder="Begin your story..."
-          spellCheck={false}
-          style={{
-            fontFamily: 'Georgia, "Times New Roman", Times, serif',
-            fontSize: '20px',
-            lineHeight: '1.75',
-            letterSpacing: '0.01em',
-          }}
-        />
+        {showFormattedPreview ? (
+          /* Formatted Preview */
+          <div
+            className={`
+              w-full h-full border-0 resize-none outline-none bg-white text-gray-900 
+              transition-all duration-300 overflow-y-auto
+              ${isFullScreen 
+                ? 'px-8 py-12 md:px-16 md:py-16' 
+                : 'px-6 py-8 sm:px-8 sm:py-12 md:px-12 md:py-16 lg:px-20 lg:py-20'
+              }
+            `}
+            style={{
+              fontFamily: 'Georgia, "Times New Roman", Times, serif',
+              fontSize: '20px',
+              lineHeight: '1.75',
+              letterSpacing: '0.01em',
+            }}
+            dangerouslySetInnerHTML={{ 
+              __html: content ? formatMarkdownToHTML(content) : '<span style="color: #9ca3af;">Begin your story...</span>' 
+            }}
+          />
+        ) : (
+          /* Regular Textarea for Editing */
+          <textarea
+            ref={textareaRef}
+            value={content}
+            onChange={handleChange}
+            onKeyDown={handleKeyDown}
+            onSelect={handleSelectionChange}
+            onMouseUp={handleSelectionChange}
+            className={`
+              w-full h-full border-0 resize-none outline-none bg-white text-gray-900 
+              placeholder-gray-400 focus:placeholder-gray-300 transition-all duration-300
+              ${isFullScreen 
+                ? 'px-8 py-12 md:px-16 md:py-16' 
+                : 'px-6 py-8 sm:px-8 sm:py-12 md:px-12 md:py-16 lg:px-20 lg:py-20'
+              }
+            `}
+            placeholder="Begin your story..."
+            spellCheck={false}
+            style={{
+              fontFamily: 'Georgia, "Times New Roman", Times, serif',
+              fontSize: '20px',
+              lineHeight: '1.75',
+              letterSpacing: '0.01em',
+            }}
+          />
+        )}
         
         {/* Floating Suggestion Overlay */}
         {renderSuggestionOverlay()}
@@ -939,7 +991,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
                     {aiAssistant.suggestions.filter(s => s.type === 'suggestion').length > 0 && (
                       <div className="pb-4">
                         <h4 className="font-medium text-gray-900 mb-3 mt-6 sticky top-0 bg-white py-2 border-b border-gray-100">Writing Suggestions:</h4>
-                        <div className="space-y-3 max-h-96 overflow-y-auto pr-2">
+                        <div className="space-y-3 max-h-[60vh] overflow-y-auto pr-2">
                           {aiAssistant.suggestions.filter(s => s.type === 'suggestion').map((suggestion, index) => (
                             <div key={`suggestion-${index}`} className="border border-gray-200 rounded-xl p-4 bg-white hover:border-blue-300 transition-colors hover:shadow-sm group">
                               <div className="flex items-start justify-between">

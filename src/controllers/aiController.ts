@@ -25,17 +25,14 @@ interface AIAnalysisRequest {
 }
 
 class AIController {
-  // Helper function to create cache keys that change when content changes
   private async createContentAwareCacheKey(
     operation: string, 
     text: string, 
     additionalParams: string = '', 
     projectId?: string
   ): Promise<string> {
-    // Create a hash of the content to detect changes
     const contentHash = crypto.createHash('md5').update(text).digest('hex').substring(0, 8);
     
-    // Get project's last modified timestamp if available
     let projectTimestamp = 'none';
     if (projectId) {
       try {
@@ -51,12 +48,10 @@ class AIController {
       }
     }
     
-    // Combine operation, content hash, project timestamp, and additional params
     const keyParts = [operation, contentHash, projectTimestamp, additionalParams].filter(Boolean);
     return keyParts.join(':');
   }
 
-  // Generate clean, actionable corrections
   async generateCorrections(req: Request<{}, {}, { text: string; projectId?: string }>, res: Response): Promise<void> {
     try {
       const { text, projectId } = req.body;
@@ -71,7 +66,6 @@ class AIController {
 
       console.log(`🔧 Generating clean corrections for text length: ${text.length}`);
 
-      // Generate corrections
       const result = await aiService.generateCleanCorrections(text, projectId, userId);
 
       res.json({
@@ -103,7 +97,6 @@ class AIController {
 
       console.log(`✨ Generating better version for text length: ${text.length}`);
 
-      // Create cache key for better version requests
       const cacheKey = await this.createContentAwareCacheKey(
         'better-version', 
         text, 
@@ -111,7 +104,6 @@ class AIController {
         projectId
       );
 
-      // Check cache first (valid for 10 minutes for better versions)
       const cached = aiResponseCache.get(cacheKey);
       if (cached) {
         console.log('📋 Returning cached better version');
@@ -123,10 +115,8 @@ class AIController {
         return;
       }
 
-      // Generate better version using AI service
       const betterVersion = await aiService.generateBetterVersion(text, projectId, userId);
 
-      // Cache the result
       aiResponseCache.set(cacheKey, betterVersion);
 
       res.json({
@@ -142,7 +132,6 @@ class AIController {
     }
   }
   
-  // Generate autocomplete suggestions (Copilot-like feature)
   async generateAutocomplete(req: Request<{}, {}, { text: string; cursorPosition: number; projectId?: string }>, res: Response): Promise<void> {
     try {
       const { text, cursorPosition, projectId } = req.body;
@@ -154,11 +143,9 @@ class AIController {
         return;
       }
 
-      // Get context around cursor position
       const beforeCursor = text.substring(0, cursorPosition);
       const afterCursor = text.substring(cursorPosition);
       
-      // Generate autocomplete suggestion
       const suggestion = await aiService.generateAutocomplete(
         beforeCursor,
         afterCursor,
@@ -167,13 +154,12 @@ class AIController {
 
       res.json({
         message: 'Autocomplete suggestion generated',
-        suggestion: suggestion || '', // Ensure we always return a string
+        suggestion: suggestion || '', 
         cursorPosition,
-        // Additional info for frontend to handle properly
         insertAt: cursorPosition,
         replaceLength: 0, // Don't replace any existing text
-        beforeCursor: beforeCursor.slice(-20), // Last 20 chars for context
-        afterCursor: afterCursor.slice(0, 20) // Next 20 chars for context
+        beforeCursor: beforeCursor.slice(-20), 
+        afterCursor: afterCursor.slice(0, 20) 
       });
     } catch (error) {
       console.error('Error generating autocomplete:', error);
@@ -183,7 +169,6 @@ class AIController {
     }
   }
 
-  // Generate writing suggestions based on context
   async generateSuggestions(req: Request<{}, {}, AISuggestionRequest>, res: Response): Promise<void> {
     try {
       const { projectId, context, analysisMode = 'fast' } = req.body;
@@ -199,7 +184,6 @@ class AIController {
       const userId = (req as any).user?.id;
       console.log(`🎯 Generating suggestions in ${analysisMode} mode for user ${userId}`);
 
-      // Content-aware cache key that includes analysis mode
       const cacheKey = await this.createContentAwareCacheKey('suggestions', context, `${analysisMode}:${userId || 'anon'}`, projectId);
       const cached = aiResponseCache.get(cacheKey);
       if (cached) {
@@ -212,7 +196,6 @@ class AIController {
         return;
       }
 
-      // Generate AI suggestions with specified mode
       const suggestions = await aiService.generateSuggestions(
         context,
         projectId,
@@ -220,7 +203,6 @@ class AIController {
         analysisMode
       );
 
-      // Cache the result
       aiResponseCache.set(cacheKey, suggestions, 600); // 10 minutes
 
       res.json({
@@ -236,7 +218,6 @@ class AIController {
     }
   }
 
-  // Analyze theme consistency with analysis mode support
   async analyzeThemeConsistency(req: Request<{}, {}, AIAnalysisRequest>, res: Response): Promise<void> {
     try {
       const { text, theme, projectId, analysisMode = 'fast' } = req.body;
@@ -250,7 +231,6 @@ class AIController {
 
       console.log(`🎯 Analyzing theme consistency in ${analysisMode} mode`);
 
-      // Content-aware cache key that includes analysis mode
       const cacheKey = await this.createContentAwareCacheKey('theme', text, `${theme}:${analysisMode}`, projectId);
       const cached = aiResponseCache.get(cacheKey);
       if (cached) {
@@ -262,8 +242,6 @@ class AIController {
         });
         return;
       }
-
-      // Generate theme analysis with specified mode
       const analysis = await aiService.analyzeThemeConsistency(text, theme, projectId, analysisMode);
       aiResponseCache.set(cacheKey, analysis, 3600);
       
@@ -294,7 +272,6 @@ class AIController {
 
       console.log(`🔮 Checking foreshadowing in ${analysisMode} mode`);
 
-      // Content-aware cache key that includes analysis mode
       const cacheKey = await this.createContentAwareCacheKey('foreshadowing', text, `${analysisMode}`, projectId);
       const cached = aiResponseCache.get(cacheKey);
       if (cached) {
@@ -307,10 +284,8 @@ class AIController {
         return;
       }
 
-      // Generate foreshadowing analysis with specified mode
       const foreshadowing = await aiService.checkForeshadowing(text, context || '', projectId, analysisMode);
       
-      // Cache for 1 hour
       aiResponseCache.set(cacheKey, foreshadowing, 3600);
       
       res.json({
@@ -340,7 +315,6 @@ class AIController {
 
       console.log(`🎭 Evaluating motivation and stakes in ${analysisMode} mode`);
 
-      // Content-aware cache key that includes analysis mode
       const cacheKey = await this.createContentAwareCacheKey('motivation', text, `${character}:${analysisMode}`, projectId);
       const cached = aiResponseCache.get(cacheKey);
       if (cached) {
@@ -428,7 +402,6 @@ class AIController {
         return;
       }
 
-      // Use the RAG service's enhanced metadata extraction
       await improvedRAGService.addDocument(content, {
         projectId,
         userId,
@@ -438,14 +411,10 @@ class AIController {
         importance: 9 // High importance for project content
       });
 
-      // Sync project context to ensure all metadata is extracted and cached
-      console.log(`🔄 Syncing project context for enhanced analytics...`);
       const projectContext = await improvedRAGService.syncProjectContext(projectId);
       
-      // Get detailed project analytics
       const projectStats = await improvedRAGService.getProjectStats(projectId);
       
-      console.log(`✅ Project successfully added to RAG with enhanced metadata:`);
       console.log(`  - Characters: ${projectStats.characters.length}`);
       console.log(`  - Themes: ${projectStats.themes.length}`);
       console.log(`  - Content Types: ${projectStats.contentTypes.length}`);
@@ -621,9 +590,6 @@ class AIController {
           message: 'All AI caches cleared successfully'
         });
       } else if (projectId) {
-        // Clear project-specific caches (this will be handled by content-aware keys automatically)
-        console.log(`🧹 Content-aware caches will auto-invalidate for project ${projectId}`);
-        
         res.json({
           message: `Cache invalidation noted for project ${projectId}. Content-aware caches will refresh automatically.`
         });

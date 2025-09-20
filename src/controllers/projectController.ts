@@ -87,7 +87,6 @@ const createProject = async (req: Request, res: Response): Promise<void> => {
         });
       } catch (error) {
         console.error('Error adding project to RAG system:', error);
-        // Don't fail the project creation if RAG indexing fails
       }
     }
     
@@ -139,7 +138,6 @@ const getProject = async (req: Request, res: Response): Promise<void> => {
     const authReq = req as AuthenticatedRequest;
     const { id } = req.params;
     
-    // Check if user has permission to access this project
     const project = await prisma.project.findUnique({
       where: {
         id,
@@ -198,7 +196,6 @@ const updateProject = async (req: Request, res: Response): Promise<void> => {
     const { id } = req.params;
     const { title, description, format, type, content, quickNotes } = req.body as UpdateProjectRequest;
     
-    // Check if user has permission to update this project
     const projectPermission = await prisma.permission.findFirst({
       where: {
         projectId: id,
@@ -302,9 +299,7 @@ const updateProject = async (req: Request, res: Response): Promise<void> => {
     // Update project content in RAG system
     if (content) {
       try {
-        // For simplicity, we're re-adding the entire content to the RAG system
-        // In a production environment, you might want to implement a more sophisticated
-        // approach that only updates changed content
+   
         await ragService.addDocument(content, {
           projectId: updatedProject.id,
           projectTitle: updatedProject.title,

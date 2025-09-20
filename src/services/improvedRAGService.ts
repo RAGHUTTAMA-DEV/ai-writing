@@ -7,6 +7,7 @@ import * as fs from 'fs';
 import * as crypto from 'crypto';
 import { PrismaClient } from '@prisma/client';
 import { searchCache, projectCache, cacheService, CacheKeys } from './cacheService';
+import aiService from './aiService';
 
 const prisma = new PrismaClient();
 
@@ -926,7 +927,7 @@ Return only a number between 0.0 and 1.0.`;
     try {
       // FAST MODE: Always use basic analysis for performance
       console.log('⚡ Using fast basic analysis (no AI calls)');
-      result = this.performBasicContentAnalysis(content, projectContext);
+      result = await this.performBasicContentAnalysis(content, projectContext);
 
       // Cache the result in both caches
       this.semanticCache.set(cacheKey, result);
@@ -944,7 +945,7 @@ Return only a number between 0.0 and 1.0.`;
     } catch (error) {
       console.error('Error analyzing content:', error);
       // Fallback to basic analysis
-      result = this.performBasicContentAnalysis(content, projectContext);
+      result = await this.performBasicContentAnalysis(content, projectContext);
       this.semanticCache.set(cacheKey, result);
       cacheService.set(cacheKey, result, 900); // Shorter cache for fallback results
       return result;
@@ -1062,7 +1063,7 @@ Style: `;
       return result;
     } catch (error) {
       console.error('Error in simple AI extraction:', error);
-      return this.performBasicContentAnalysis(content);
+      return await this.performBasicContentAnalysis(content);
     }
   }
 
@@ -1084,15 +1085,17 @@ Style: `;
       .slice(0, maxLength);
   }
 
-  private performBasicContentAnalysis(content: string, projectContext?: ProjectContext | null): {
+  private async performBasicContentAnalysis(content: string, projectContext?: ProjectContext | null): Promise<{
     characters: string[];
     themes: string[];
     emotions: string[];
     plotElements: string[];
     semanticTags: string[];
-  } {
+  }> {
+    const characters = await this.extractCharactersBasic(content, projectContext);
+    
     return {
-      characters: this.extractCharactersBasic(content, projectContext),
+      characters,
       themes: this.extractThemesBasic(content),
       emotions: this.extractEmotionsBasic(content),
       plotElements: this.extractPlotElementsBasic(content),
@@ -1399,62 +1402,52 @@ Style: `;
   }
 
   // Helper methods
-  private extractCharactersBasic(content: string, projectContext?: ProjectContext | null): string[] {
-    const characters = new Set<string>();
-    
-    // Look for quoted dialogue (indicating speakers)
-    const dialogueMatches = content.match(/"[^"]*"/g);
-    if (dialogueMatches) {
-      // Look for attribution patterns like 'said John', 'John replied', etc.
-      dialogueMatches.forEach(quote => {
-        const beforeQuote = content.substring(0, content.indexOf(quote));
-        const afterQuote = content.substring(content.indexOf(quote) + quote.length);
+  private async extractCharactersBasic(content: string, projectContext?: ProjectContext | null): Promise<string[]> {
+    try {
+      // Use AI-based extraction for better accuracy
+      const prompt = `Analyze this text and extract ONLY the actual character names (people, beings, entities with proper names). Do not include:
+- Pronouns (he, she, his, her, they, etc.)
+- Common words or titles (Chapter, King, Queen, etc.)
+- Generic descriptions (Giant, Warrior, etc.)
+- Place names (Midgard, Asgard, etc.)
+
+Text: "${content.slice(0, 1000)}"
+
+Return only a simple list of actual character names, one per line. If no clear character names are found, return "None found".`;
+
+      const response = await aiService.generateStructureAnalysis(prompt);
+      
+      // Parse the AI response
+      const lines = response.split('\n').filter(line => line.trim() && !line.includes('None found'));
+      const characters = lines
+        .map(line => line.trim().replace(/^[-*•]\s*/, '')) // Remove bullet points
+        .filter(name => name.length > 1 && name.length < 30) // Reasonable length
+        .slice(0, 10); // Limit to 10 characters
+      
+      // If we have project context, prioritize known characters
+      if (projectContext?.characters) {
+        const knownCharacters = projectContext.characters.filter(char => 
+          content.toLowerCase().includes(char.toLowerCase())
+        );
         
-        // Look for speaker attribution
-        const speakerPatterns = [
-          /(\w+)\s+said/i,
-          /(\w+)\s+replied/i,
-          /(\w+)\s+asked/i,
-          /(\w+)\s+whispered/i,
-          /(\w+)\s+shouted/i,
-          /said\s+(\w+)/i,
-          /replied\s+(\w+)/i
-        ];
-        
-        speakerPatterns.forEach(pattern => {
-          const match = afterQuote.match(pattern) || beforeQuote.match(pattern);
-          if (match && match[1] && match[1].length > 2 && !this.isCommonWord(match[1])) {
-            characters.add(match[1]);
-          }
-        });
-      });
+        // Merge known characters with AI-extracted ones, prioritizing known
+        const allCharacters = [...new Set([...knownCharacters, ...characters])];
+        return allCharacters.slice(0, 10);
+      }
+      
+      return characters.length > 0 ? characters : [];
+    } catch (error) {
+      console.error('AI-based character extraction failed, using fallback:', error);
+      
+      // Fallback to project context only if AI fails
+      if (projectContext?.characters) {
+        return projectContext.characters.filter(char => 
+          content.toLowerCase().includes(char.toLowerCase())
+        ).slice(0, 10);
+      }
+      
+      return [];
     }
-    
-    // Look for proper nouns (capitalized words that aren't sentence starts)
-    const sentences = content.split(/[.!?]+/);
-    sentences.forEach(sentence => {
-      const words = sentence.trim().split(/\s+/);
-      words.slice(1).forEach(word => { // Skip first word (sentence start)
-        const cleanWord = word.replace(/[^\w]/g, '');
-        if (cleanWord.length > 2 && 
-            cleanWord[0] === cleanWord[0].toUpperCase() && 
-            !this.isCommonWord(cleanWord) &&
-            !this.isLocationWord(cleanWord)) {
-          characters.add(cleanWord);
-        }
-      });
-    });
-    
-    // If we have project context, prioritize known characters
-    if (projectContext?.characters) {
-      projectContext.characters.forEach(char => {
-        if (content.toLowerCase().includes(char.toLowerCase())) {
-          characters.add(char);
-        }
-      });
-    }
-    
-    return Array.from(characters).slice(0, 10);
   }
 
   private extractThemesBasic(content: string): string[] {
@@ -2020,13 +2013,43 @@ Style: `;
 
   // Utility methods
   private isCommonWord(word: string): boolean {
-    const commonWords = new Set(['the', 'and', 'but', 'for', 'you', 'all', 'that', 'have', 'her', 'was', 'one', 'our', 'had', 'but', 'not', 'what', 'all', 'were', 'they', 'we', 'when', 'your', 'can', 'said']);
+    const commonWords = new Set([
+      // Articles and pronouns
+      'the', 'and', 'but', 'for', 'you', 'all', 'that', 'have', 'her', 'was', 'one', 'our', 'had', 'but', 'not', 'what', 'all', 'were', 'they', 'we', 'when', 'your', 'can', 'said',
+      // Additional pronouns and common words
+      'his', 'him', 'she', 'it', 'them', 'their', 'this', 'that', 'these', 'those', 'he', 'who', 'which', 'where', 'why', 'how',
+      // Common verbs and adjectives
+      'get', 'got', 'see', 'saw', 'come', 'came', 'go', 'went', 'make', 'made', 'take', 'took', 'give', 'gave',
+      // Story structure words
+      'chapter', 'page', 'story', 'book', 'tale', 'scene', 'part', 'section',
+      // Common titles and descriptors
+      'king', 'queen', 'prince', 'princess', 'lord', 'lady', 'sir', 'master', 'mister', 'miss', 'mrs'
+    ]);
     return commonWords.has(word.toLowerCase());
   }
 
   private isLocationWord(word: string): boolean {
-    const locationWords = new Set(['Street', 'Road', 'Avenue', 'City', 'Town', 'Country', 'State', 'Park', 'School', 'Hospital']);
+    const locationWords = new Set([
+      // General location words
+      'Street', 'Road', 'Avenue', 'City', 'Town', 'Country', 'State', 'Park', 'School', 'Hospital',
+      // Fantasy/Mythology locations (these are places, not characters)
+      'Midgard', 'Asgard', 'Valhalla', 'Bifrost', 'Jotunheim', 'Alfheim', 'Helheim',
+      // Common fictional location words
+      'Castle', 'Palace', 'Tower', 'Hall', 'Chamber', 'Kingdom', 'Empire', 'Realm', 'World', 'Land', 'Forest', 'Mountain', 'River', 'Sea', 'Ocean'
+    ]);
     return locationWords.has(word);
+  }
+
+  private isGenericTerm(word: string): boolean {
+    const genericTerms = new Set([
+      // Generic character descriptions
+      'Giant', 'Warrior', 'Soldier', 'Guard', 'Knight', 'Wizard', 'Witch', 'Priest', 'God', 'Goddess',
+      // Generic roles and titles
+      'Father', 'Mother', 'Brother', 'Sister', 'Son', 'Daughter', 'Friend', 'Enemy', 'Stranger',
+      // Common fantasy creatures (generic, not specific names)
+      'Dragon', 'Elf', 'Dwarf', 'Human', 'Orc', 'Goblin', 'Troll', 'Spirit', 'Ghost', 'Demon', 'Angel'
+    ]);
+    return genericTerms.has(word);
   }
 
   private hashContent(content: string): string {

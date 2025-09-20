@@ -17,15 +17,13 @@ import chatbotRoutes from './routes/chatbotRoutes';
 import enhancedChatbotRoutes from './routes/enhancedChatbotRoutes';
 import analyticsRoutes from './routes/analyticsRoutes';
 
-// Load environment variables
 dotenv.config();
 
-// Initialize Express app
 const app: Application = express();
 const PORT: number = parseInt(process.env.PORT || '5000', 10);
 
 // Middleware
-app.use(helmet()); // Security headers
+app.use(helmet()); 
 
 // Configure CORS with specific origins
 const corsOptions = {
@@ -55,11 +53,9 @@ const limiter = rateLimit({
 });
 app.use(limiter);
 
-// Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Session middleware (required for Passport)
 app.use(
   session({
     secret: process.env.SESSION_SECRET || 'your-session-secret-key',
@@ -72,7 +68,6 @@ app.use(
   })
 );
 
-// Passport middleware
 app.use(passport.initialize());
 app.use(passport.session());
 
@@ -105,15 +100,12 @@ app.get('/health', (req: Request, res: Response) => {
   });
 });
 
-// Enhanced error handling middleware
 app.use(errorHandler);
 
-// 404 handler
 app.use((req: Request, res: Response) => {
   res.status(404).json({ message: 'Route not found' });
 });
 
-// Start server
 app.listen(PORT, () => {
   logger.info('Server started successfully', {
     port: PORT,
@@ -121,12 +113,10 @@ app.listen(PORT, () => {
     timestamp: new Date().toISOString()
   });
   
-  // Setup log cleanup interval (daily)
   setInterval(() => {
     logger.cleanupOldLogs();
   }, 24 * 60 * 60 * 1000);
   
-  // Start performance monitoring
   performanceService.startPeriodicLogging(5); // Log every 5 minutes
   
   logger.info('AI Writing Platform is ready to serve requests');

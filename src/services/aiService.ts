@@ -42,7 +42,7 @@ export class AIService {
   private writingPatterns: Map<string, any> = new Map();
   private readonly MAX_CONVERSATION_MEMORY_SIZE = 100;
   private readonly MAX_WRITING_PATTERNS_SIZE = 50;
-  private readonly AI_TIMEOUT_MS = 60000; // 60 second timeout - reasonable for detailed analysis
+  private readonly AI_TIMEOUT_MS = 120000; // 2 minutes for detailed analysis
 
     // Embedding-free AI method specifically for structure analysis
     async generateStructureAnalysis(prompt: string): Promise<string> {
@@ -77,7 +77,7 @@ export class AIService {
       
       this.model = new ChatGoogleGenerativeAI({
         model: "gemini-2.0-flash",
-        maxOutputTokens: 1024, // Reduced for faster response
+        maxOutputTokens: 4096, // Increased for complete analysis responses
         apiKey: apiKey,
         temperature: 0.6, // Slightly lower for more focused responses
         maxRetries: 1,
@@ -612,11 +612,9 @@ Provide rich, detailed feedback that goes beyond surface-level corrections. Be e
       let relevantChunks: any[] = [];
       let projectFullContent = '';
       
-      // Get project context and stats (only for deep mode)
       const projectContext = await improvedRAGService.syncProjectContext(projectId);
       const projectStats = await improvedRAGService.getProjectStats(projectId);
       
-      // Get project content
       try {
         const project = await prisma.project.findUnique({
           where: { id: projectId },
@@ -1443,7 +1441,11 @@ Please provide a comprehensive foreshadowing analysis with the following structu
 
     // Specialized handlers for different types of requests
     private async handleWritingHelp(userInput: string, userId: string, projectId?: string, context?: string): Promise<string> {
-      return this.generateSuggestions(context || userInput, projectId || 'default', userId);
+      // If no valid project ID, provide general writing help
+      if (!projectId) {
+        return this.handleGeneralQuery(userInput, userId, undefined, context);
+      }
+      return this.generateSuggestions(context || userInput, projectId, userId);
     }
 
     private async handleCharacterDevelopment(userInput: string, userId: string, projectId?: string, context?: string): Promise<string> {
