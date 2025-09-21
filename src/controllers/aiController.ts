@@ -556,46 +556,99 @@ class AIController {
         };
 
         if (project.content && project.content.length > 0) {
-          // Generate AI-based analytics with direct prompt
-          const analyticsPrompt = `Analyze this story content and extract key information:
+          // Generate AI-based analytics with improved prompt
+          const analyticsPrompt = `Analyze this story content and provide detailed insights. You must respond ONLY with valid JSON in exactly this format:
 
-"${project.content.slice(0, 2000)}"
+{"characters": ["name1", "name2"], "themes": ["theme1", "theme2"], "emotions": ["emotion1", "emotion2"], "plotElements": ["event1", "event2"], "writingStyle": "style", "genre": "genre", "tone": "tone", "pacing": "pacing", "strengths": ["strength1", "strength2"], "suggestions": ["suggestion1", "suggestion2"]}
 
-Please provide a JSON response with the following structure:
-{
-  "characters": ["character1", "character2", "character3"],
-  "themes": ["theme1", "theme2", "theme3"],
-  "emotions": ["emotion1", "emotion2"],
-  "plotElements": ["event1", "event2"],
-  "writingStyle": "descriptive/concise/dramatic/etc",
-  "genre": "fantasy/scifi/drama/etc"
-}
+Story content:
+"${project.content.slice(0, 1500)}"
 
-Focus on:
-- Main characters (people, not places or objects)
-- Central themes and concepts
-- Emotional tones present
-- Key plot events or conflicts
-- Overall writing style and genre
+Provide comprehensive analysis:
+- characters: Extract actual character names (people, beings with names), not pronouns or generic terms
+- themes: Identify deeper meanings, concepts, or ideas (family, betrayal, coming-of-age, justice, etc.)
+- emotions: List feelings or moods expressed (fear, love, anger, hope, despair, joy, etc.)
+- plotElements: Key events, conflicts, or story developments (discovery, confrontation, revelation, etc.)
+- writingStyle: Describe the writing approach (descriptive, concise, dramatic, poetic, dialogue-heavy, etc.)
+- genre: Classify the story type (fantasy, sci-fi, drama, romance, mystery, thriller, etc.)
+- tone: Overall emotional atmosphere (dark, hopeful, mysterious, humorous, serious, etc.)
+- pacing: Story rhythm (fast-paced, slow-burn, episodic, building, etc.)
+- strengths: What works well in the writing (character development, dialogue, world-building, etc.)
+- suggestions: Areas for improvement (pacing, character depth, plot development, etc.)
 
-Return only valid JSON.`;
+Respond with ONLY the JSON object, no other text:`;
 
           try {
             const aiResponse = await aiService.generateStructureAnalysis(analyticsPrompt);
+            console.log('🤖 Raw AI Response for analytics:', aiResponse);
+            
             let aiAnalytics;
             
             try {
-              // Try to parse as JSON
-              aiAnalytics = JSON.parse(aiResponse);
+              // Clean the response to extract JSON
+              let cleanResponse = aiResponse.trim();
+              
+              // Remove any markdown code blocks
+              cleanResponse = cleanResponse.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+              
+              // Find JSON object boundaries
+              const startIndex = cleanResponse.indexOf('{');
+              const endIndex = cleanResponse.lastIndexOf('}');
+              
+              if (startIndex !== -1 && endIndex !== -1) {
+                cleanResponse = cleanResponse.substring(startIndex, endIndex + 1);
+              }
+              
+              console.log('🧹 Cleaned AI Response:', cleanResponse);
+              aiAnalytics = JSON.parse(cleanResponse);
+              
+              // Validate the response structure
+              if (!aiAnalytics.characters) aiAnalytics.characters = [];
+              if (!aiAnalytics.themes) aiAnalytics.themes = [];
+              if (!aiAnalytics.emotions) aiAnalytics.emotions = [];
+              if (!aiAnalytics.plotElements) aiAnalytics.plotElements = [];
+              if (!aiAnalytics.writingStyle) aiAnalytics.writingStyle = 'balanced';
+              if (!aiAnalytics.genre) aiAnalytics.genre = project.type || 'fiction';
+              if (!aiAnalytics.tone) aiAnalytics.tone = 'neutral';
+              if (!aiAnalytics.pacing) aiAnalytics.pacing = 'moderate';
+              if (!aiAnalytics.strengths) aiAnalytics.strengths = [];
+              if (!aiAnalytics.suggestions) aiAnalytics.suggestions = [];
+              
+              console.log('✅ Parsed AI Analytics:', aiAnalytics);
+              
             } catch (parseError) {
-              console.log('Failed to parse AI response as JSON, using defaults');
+              console.log('❌ Failed to parse AI response as JSON:', parseError);
+              console.log('Raw response was:', aiResponse);
+              
+              // Fallback: try to extract information with regex
+              const characterMatches = aiResponse.match(/"characters":\s*\[(.*?)\]/);
+              const themeMatches = aiResponse.match(/"themes":\s*\[(.*?)\]/);
+              
+              const extractArrayFromMatch = (match: RegExpMatchArray | null): string[] => {
+                if (!match) return [];
+                try {
+                  const arrayStr = '[' + match[1] + ']';
+                  return JSON.parse(arrayStr);
+                } catch {
+                  return [];
+                }
+              };
+              
               aiAnalytics = {
-                characters: ['Unable to extract characters'],
-                themes: ['Unable to extract themes'],
+                characters: extractArrayFromMatch(characterMatches).length > 0 
+                  ? extractArrayFromMatch(characterMatches)
+                  : ['Characters need manual review'],
+                themes: extractArrayFromMatch(themeMatches).length > 0
+                  ? extractArrayFromMatch(themeMatches) 
+                  : ['Themes need manual review'],
                 emotions: [],
                 plotElements: [],
                 writingStyle: 'balanced',
-                genre: project.type || 'fiction'
+                genre: project.type || 'fiction',
+                tone: 'neutral',
+                pacing: 'moderate',
+                strengths: ['Content present for analysis'],
+                suggestions: ['Consider adding more detailed character development']
               };
             }
             
@@ -606,7 +659,15 @@ Return only valid JSON.`;
               emotions: aiAnalytics.emotions || [],
               plotElements: aiAnalytics.plotElements || [],
               writingStyle: aiAnalytics.writingStyle || 'balanced',
-              genre: aiAnalytics.genre || project.type || 'fiction'
+              genre: aiAnalytics.genre || project.type || 'fiction',
+              tone: aiAnalytics.tone || 'neutral',
+              pacing: aiAnalytics.pacing || 'moderate',
+              strengths: aiAnalytics.strengths || [],
+              suggestions: aiAnalytics.suggestions || [],
+              recommendations: [
+                ...(basicAnalytics.recommendations || []),
+                ...(aiAnalytics.suggestions || [])
+              ]
             };
 
             aiResponseCache.set(cacheKey, summary, 600); // 10 minutes cache
