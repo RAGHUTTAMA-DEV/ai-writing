@@ -86,23 +86,42 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
   
   // Optimized debounced autocomplete function with caching and cancellation
   const debouncedAutocomplete = useCallback(async (text: string, cursorPos: number) => {
-    if (text.length < 10 || !projectId) return;
+    // Enhanced validation for better autocomplete triggers
+    if (text.length < 15 || !projectId) return;
+    
+    // Skip if cursor is not at the end of a word or sentence
+    const charBeforeCursor = text[cursorPos - 1];
+    const charAfterCursor = text[cursorPos] || ' ';
+    
+    // Only trigger autocomplete in meaningful contexts
+    if (charBeforeCursor && !/[\w.,!?;:]/.test(charBeforeCursor)) return;
+    if (charAfterCursor && !/[\s\n]/.test(charAfterCursor)) return;
+    
+    // Get more context for better suggestions
+    const contextStart = Math.max(0, cursorPos - 200); // More context
+    const beforeText = text.slice(contextStart, cursorPos);
+    
+    // Skip if we're in the middle of structured text or prompts
+    const recentText = beforeText.slice(-100).toLowerCase();
+    if (recentText.includes('analyze') || recentText.includes('suggestions:') || 
+        recentText.includes('context:') || recentText.includes('"text"')) {
+      return;
+    }
     
     // Cancel any ongoing request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
     }
     
-    // Create cache key based on context around cursor
-    const contextStart = Math.max(0, cursorPos - 50);
-    const contextEnd = Math.min(text.length, cursorPos + 20);
-    const context = text.slice(contextStart, contextEnd);
-    const cacheKey = `${context}_${cursorPos}`;
+    // Enhanced cache key with more context
+    const contextForCache = beforeText.slice(-100);
+    const cacheKey = `enhanced_${projectId}_${contextForCache}_${cursorPos}`;
     
-    // Check cache first (valid for 5 minutes)
+    // Check cache first (valid for 3 minutes for fresher suggestions)
     const cached = suggestionCache.current.get(cacheKey);
     const now = Date.now();
-    if (cached && (now - cached.timestamp) < 5 * 60 * 1000) {
+    if (cached && (now - cached.timestamp) < 3 * 60 * 1000) {
+      console.log('📋 Using cached enhanced autocomplete');
       setSuggestion({
         text: cached.suggestion,
         position: cursorPos,
@@ -114,6 +133,7 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
     
     try {
       setIsLoadingSuggestion(true);
+      console.log('🎯 Requesting enhanced autocomplete with project context');
       
       // Create new abort controller
       const abortController = new AbortController();
@@ -127,14 +147,33 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       }
       
       if (response.suggestion && response.suggestion.trim()) {
+        // Validate suggestion quality
+        const suggestion = response.suggestion.trim();
+        
+        // Skip very short or very long suggestions
+        if (suggestion.length < 2 || suggestion.length > 80) {
+          console.log('🚫 Suggestion rejected: inappropriate length');
+          return;
+        }
+        
+        // Skip if suggestion starts with common generic words unless it's meaningful
+        const firstWord = suggestion.split(' ')[0]?.toLowerCase();
+        const genericStarters = ['the', 'and', 'but', 'or', 'so', 'then'];
+        if (genericStarters.includes(firstWord) && suggestion.split(' ').length < 3) {
+          console.log('🚫 Suggestion rejected: too generic');
+          return;
+        }
+        
+        console.log(`✨ Enhanced autocomplete: "${suggestion}"`);
+        
         // Cache the result
         suggestionCache.current.set(cacheKey, {
-          suggestion: response.suggestion,
+          suggestion: suggestion,
           timestamp: now
         });
         
-        // Clean old cache entries (keep only last 20)
-        if (suggestionCache.current.size > 20) {
+        // Clean old cache entries (keep only last 15 for better memory management)
+        if (suggestionCache.current.size > 15) {
           const entries = Array.from(suggestionCache.current.entries());
           entries.sort((a, b) => b[1].timestamp - a[1].timestamp);
           suggestionCache.current.clear();
@@ -187,10 +226,10 @@ export const CopilotEditor: React.FC<CopilotEditorProps> = ({
       clearTimeout(timeoutRef.current);
     }
     
-    // Set timeout for AI autocomplete (reduced to 2 seconds for better UX)
+    // Set timeout for enhanced AI autocomplete (3 seconds for quality suggestions)
     timeoutRef.current = setTimeout(() => {
       debouncedAutocomplete(newContent, cursorPos);
-    }, 2000);
+    }, 3000);
   };
 
   // Handle key presses

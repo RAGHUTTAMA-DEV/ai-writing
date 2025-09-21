@@ -122,7 +122,7 @@ export class AIService {
         ];
         
         if (aiPromptIndicators.some(indicator => lowerBefore.includes(indicator))) {
-          console.log(' Skipping autocomplete for AI prompt/instruction text');
+          console.log('🚫 Skipping autocomplete for AI prompt/instruction text');
           return ''; // Don't autocomplete AI prompts
         }
         
@@ -130,27 +130,36 @@ export class AIService {
         const quoteCount = (beforeCursor.match(/"/g) || []).length;
         const colonCount = (beforeCursor.match(/:/g) || []).length;
         if (quoteCount > 2 && colonCount > 2) {
-          console.log(' Skipping autocomplete for structured/prompt text');
+          console.log('🚫 Skipping autocomplete for structured/prompt text');
           return '';
         }
 
-        const contextLength = Math.min(beforeCursor.length, 300);
+        const contextLength = Math.min(beforeCursor.length, 500); // Increased context for better suggestions
         const context = beforeCursor.slice(-contextLength);
         
-        const cacheKey = `fastautocomplete:${context.slice(-50)}`;
+        // Enhanced cache key with project context
+        const projectContext = projectId ? await this.getCachedProjectContext(projectId) : null;
+        const cacheKey = `enhanced-autocomplete:${projectId || 'no-project'}:${context.slice(-100)}`;
         
         const cachedSuggestion = aiResponseCache.get<string>(cacheKey);
         if (cachedSuggestion) {
+          console.log('💨 Using cached enhanced autocomplete suggestion');
           return cachedSuggestion;
         }
         
-        const suggestion = await this.generateFastAutocompleteSuggestion(context, afterCursor);
+        console.log('🎯 Generating enhanced autocomplete with project context');
+        const suggestion = await this.generateEnhancedAutocompleteSuggestion(
+          context, 
+          afterCursor, 
+          projectContext
+        );
         
-        aiResponseCache.set(cacheKey, suggestion, 180);
+        // Cache for 5 minutes
+        aiResponseCache.set(cacheKey, suggestion, 300);
         
         return suggestion;
       } catch (error) {
-        console.error('Error generating fast autocomplete:', error);
+        console.error('Error generating enhanced autocomplete:', error);
         return '';
       }
     }
@@ -386,55 +395,111 @@ Enhanced version:`;
   }
     
     // Super fast and simple autocomplete suggestion method
-    private async generateFastAutocompleteSuggestion(
+    private async generateEnhancedAutocompleteSuggestion(
       context: string,
-      afterCursor: string
+      afterCursor: string,
+      projectContext?: ProjectContext | null
     ): Promise<string> {
       try {
         // Get more context words for better quality suggestions
         const contextWords = context.trim().split(/\s+/);
-        const lastWords = contextWords.slice(-15).join(' '); // Use last 15 words for better context
+        const lastWords = contextWords.slice(-20).join(' '); // Use last 20 words for better context
         
-        // Better prompt for quality autocomplete suggestions
-        const prompt = `You are a creative writing assistant. Continue this text naturally and smoothly.
+        // Build enhanced context with project information
+        let enhancedPrompt = `You are an intelligent writing assistant that understands story context. Continue this text naturally.`;
+        
+        // Add project context if available
+        if (projectContext) {
+          enhancedPrompt += `\n\nSTORY CONTEXT:`;
+          if (projectContext.characters && projectContext.characters.length > 0) {
+            enhancedPrompt += `\n- Characters: ${projectContext.characters.slice(0, 5).join(', ')}`;
+          }
+          if (projectContext.themes && projectContext.themes.length > 0) {
+            enhancedPrompt += `\n- Themes: ${projectContext.themes.slice(0, 3).join(', ')}`;
+          }
+          if (projectContext.writingStyle) {
+            enhancedPrompt += `\n- Style: ${projectContext.writingStyle}`;
+          }
+          if (projectContext.settings && projectContext.settings.length > 0) {
+            enhancedPrompt += `\n- Setting: ${projectContext.settings.slice(0, 2).join(', ')}`;
+          }
+        }
+        
+        // Analyze the immediate context for better suggestions
+        const analysis = this.analyzeWritingQuick(lastWords);
+        
+        enhancedPrompt += `\n\nCURRENT TEXT: "${lastWords}"`;
+        
+        // Add context about what comes after (if any)
+        if (afterCursor.trim().length > 0) {
+          const afterWords = afterCursor.trim().split(/\s+/).slice(0, 5).join(' ');
+          enhancedPrompt += `\nFOLLOWING TEXT: "${afterWords}"`;
+        }
+        
+        enhancedPrompt += `\n\nINSTRUCTIONS:
+- Provide a natural continuation that fits the story context
+- Maintain consistency with established characters and themes
+- Match the current writing tone (${analysis.tone}) and pacing (${analysis.pacing})
+- Continue with 2-6 words that flow perfectly
+- Only provide the continuation words, no explanations
+- Make it sound like the author's natural voice
 
-Text: "${lastWords}"
+CONTINUATION:`;
 
-Continue with the most natural next 2-4 words that would flow perfectly. Only provide the continuation words, nothing else:`;
-
-        // Fast AI call using optimized fast model with reasonable timeout for quality
+        // Enhanced AI call with better timeout for quality
         const response = await Promise.race([
-          this.fastModel!.invoke(prompt),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 5000)) // 5 second max for balance of speed and quality
+          this.fastModel!.invoke(enhancedPrompt),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), 6000)) // 6 seconds for enhanced quality
         ]) as any;
         
         let suggestion = (response.content as string).trim();
         
-        // Better cleanup for quality suggestions
+        // Enhanced cleanup for quality suggestions
         suggestion = suggestion.replace(/^["'`]|["'`]$/g, '').trim();
-        suggestion = suggestion.replace(/^(next words:|continue:|continuation:|text:|words:)/i, '').trim();
+        suggestion = suggestion.replace(/^(continuation:|next words:|continue:|text:|words:|here:|response:)/i, '').trim();
         suggestion = suggestion.split('\n')[0]; // Take first line only
+        suggestion = suggestion.replace(/[^\w\s.,!?;:'"()-]/g, ''); // Clean up weird characters
         
-        // Don't cut off mid-sentence, but limit to reasonable length
+        // Smart word limiting - preserve complete phrases
         const words = suggestion.trim().split(/\s+/);
-        if (words.length > 6) {
-          suggestion = words.slice(0, 6).join(' ');
+        if (words.length > 8) {
+          // Try to end at natural breaks (punctuation)
+          let cutoff = 8;
+          for (let i = 6; i < Math.min(words.length, 8); i++) {
+            if (words[i].match(/[.,!?;:]$/)) {
+              cutoff = i + 1;
+              break;
+            }
+          }
+          suggestion = words.slice(0, cutoff).join(' ');
         }
         
-        // Better validation - allow longer, more meaningful suggestions
-        if (suggestion.length > 40 || suggestion.length < 2) {
+        // Enhanced validation - allow longer, more meaningful suggestions
+        if (suggestion.length > 60 || suggestion.length < 2) {
+          console.log('🚫 Suggestion rejected: inappropriate length');
           return '';
         }
         
         // Don't return if it just repeats the last word
         const lastWord = lastWords.trim().split(' ').pop()?.toLowerCase();
         if (lastWord && suggestion.toLowerCase().startsWith(lastWord)) {
+          console.log('🚫 Suggestion rejected: repeats last word');
           return '';
         }
         
+        // Don't return obvious or generic continuations
+        const genericWords = ['the', 'and', 'but', 'or', 'so', 'then', 'now', 'here', 'there'];
+        const firstSuggestionWord = suggestion.trim().split(' ')[0]?.toLowerCase();
+        if (genericWords.includes(firstSuggestionWord) && words.length < 3) {
+          console.log('🚫 Suggestion rejected: too generic');
+          return '';
+        }
+        
+        console.log(`✨ Enhanced autocomplete suggestion: "${suggestion}"`);
         return suggestion;
       } catch (error) {
-        // If anything fails, return empty string fast
+        console.error('Error in enhanced autocomplete:', error);
+        // Return empty string if enhanced fails
         return '';
       }
     }
@@ -900,9 +965,6 @@ Provide specific, implementable advice that will help the writer create more eng
         plotPoints
       };
     }
-
-  // Deep theme consistency analysis with narrative expertise
-  // HYBRID MODE: Supports both fast (text-based) and deep (embedding-based) analysis
   async analyzeThemeConsistency(text: string, theme: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<string> {
     if (!this.model) {
       return 'AI features are not available due to missing API key configuration.';
@@ -1437,9 +1499,7 @@ Please provide a comprehensive foreshadowing analysis with the following structu
       return bestMatch;
     }
 
-    // Specialized handlers for different types of requests
     private async handleWritingHelp(userInput: string, userId: string, projectId?: string, context?: string): Promise<string> {
-      // If no valid project ID, provide general writing help
       if (!projectId) {
         return this.handleGeneralQuery(userInput, userId, undefined, context);
       }
@@ -1525,10 +1585,8 @@ Please provide a comprehensive foreshadowing analysis with the following structu
       return response.content as string;
     }
 
-    // Fast mode query handler with full story content
     private async handleFastModeQuery(userInput: string, userId: string, projectId: string, context?: string): Promise<string> {
       try {
-        // Get the full project content
         const project = await (prisma as any).project.findUnique({
           where: { id: projectId }
         });
@@ -1540,7 +1598,6 @@ Please provide a comprehensive foreshadowing analysis with the following structu
         const memory = await this.getConversationMemory(userId, projectId);
         const recentContext = memory.messages.slice(-3).map(m => `${m.role}: ${m.content}`).join('\n');
 
-        // Create a focused prompt that answers the specific question using the full story
         const prompt = `
           You are an expert writing assistant analyzing a story to answer the user's specific question.
           
@@ -1808,7 +1865,6 @@ Please provide a comprehensive foreshadowing analysis with the following structu
     }
 
     private extractAdvancedThemes(text: string): string[] {
-      // Extract themes using simplified logic
       const themeKeywords = {
         'love': ['love', 'romance', 'heart', 'affection'],
         'betrayal': ['betray', 'deceive', 'lie', 'cheat'],
@@ -1830,14 +1886,12 @@ Please provide a comprehensive foreshadowing analysis with the following structu
     }
 
     private extractCharacters(text: string): string[] {
-      // Extract character names using more sophisticated pattern matching
       const words = text.split(/\s+/);
       const potentialNames = words.filter(word => 
         /^[A-Z][a-z]{2,}$/.test(word) && 
         !['The', 'And', 'But', 'For', 'Nor', 'Or', 'So', 'Yet', 'This', 'That', 'These', 'Those'].includes(word)
       );
       
-      // Count frequency and return most frequent
       const frequency: Record<string, number> = {};
       potentialNames.forEach(name => {
         frequency[name] = (frequency[name] || 0) + 1;
