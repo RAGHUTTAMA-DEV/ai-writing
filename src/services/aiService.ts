@@ -77,23 +77,21 @@ export class AIService {
       
       this.model = new ChatGoogleGenerativeAI({
         model: "gemini-2.0-flash",
-        maxOutputTokens: 4096, // Increased for complete analysis responses
+        maxOutputTokens: 4096, 
         apiKey: apiKey,
-        temperature: 0.6, // Slightly lower for more focused responses
+        temperature: 0.6, 
         maxRetries: 1,
       });
       
-      // Create a separate fast model for autocomplete with better quality settings
       this.fastModel = new ChatGoogleGenerativeAI({
         model: "gemini-2.0-flash",
-        maxOutputTokens: 100, // Increased for better quality responses
+        maxOutputTokens: 1000, 
         apiKey: apiKey,
         temperature: 0.7, // Higher temperature for more creative and natural suggestions
-        maxRetries: 0, // No retries for speed
+        maxRetries: 0, 
       });
     }
 
-    // Timeout wrapper for AI calls
     private async callWithTimeout<T>(promise: Promise<T>, operation: string): Promise<T> {
       const timeoutPromise = new Promise<never>((_, reject) => {
         setTimeout(() => {
@@ -124,7 +122,7 @@ export class AIService {
         ];
         
         if (aiPromptIndicators.some(indicator => lowerBefore.includes(indicator))) {
-          console.log('🚫 Skipping autocomplete for AI prompt/instruction text');
+          console.log(' Skipping autocomplete for AI prompt/instruction text');
           return ''; // Don't autocomplete AI prompts
         }
         
@@ -132,27 +130,22 @@ export class AIService {
         const quoteCount = (beforeCursor.match(/"/g) || []).length;
         const colonCount = (beforeCursor.match(/:/g) || []).length;
         if (quoteCount > 2 && colonCount > 2) {
-          console.log('🚫 Skipping autocomplete for structured/prompt text');
+          console.log(' Skipping autocomplete for structured/prompt text');
           return '';
         }
 
-        // Get more context for better quality suggestions (but still fast)
         const contextLength = Math.min(beforeCursor.length, 300);
         const context = beforeCursor.slice(-contextLength);
         
-        // Simple cache key based on just the context (no timestamp for better caching)
         const cacheKey = `fastautocomplete:${context.slice(-50)}`;
         
-        // Try to get cached result first (shorter cache time)
         const cachedSuggestion = aiResponseCache.get<string>(cacheKey);
         if (cachedSuggestion) {
           return cachedSuggestion;
         }
         
-        // Super simple and fast autocomplete generation
         const suggestion = await this.generateFastAutocompleteSuggestion(context, afterCursor);
         
-        // Cache for 3 minutes for good balance of freshness and performance
         aiResponseCache.set(cacheKey, suggestion, 180);
         
         return suggestion;
@@ -162,7 +155,6 @@ export class AIService {
       }
     }
 
-  // NEW: Generate clean, actionable corrections with apply functionality
   async generateCleanCorrections(
     text: string,
     projectId?: string,

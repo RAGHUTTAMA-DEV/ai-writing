@@ -391,10 +391,48 @@ class APIService {
   }
 
   // Project Analytics
-  async getProjectAnalytics(projectId: string): Promise<{
+  async getProjectAnalytics(projectId: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<{
     message: string;
-    projectId: string;
-    basic: {
+    summary?: {
+      projectId: string;
+      title: string;
+      wordCount: number;
+      lastAnalyzed: string;
+      estimatedReadingTime: number;
+      estimatedScenes: number;
+      suggestedChapters: number;
+      genre: string | null;
+      writingStyle: string;
+      characters: string[];
+      themes: string[];
+      emotions?: string[];
+      plotElements?: string[];
+      recommendations: string[];
+      analytics?: {
+        characters: string[];
+        themes: string[];
+        contentTypes: string[];
+        emotions: string[];
+        plotElements: string[];
+        semanticTags: string[];
+        totalDocuments: number;
+        totalChunks: number;
+        totalWordCount: number;
+        averageImportance: number;
+        lastUpdated?: string;
+      };
+      context?: {
+        writingStyle: string;
+        toneAnalysis: string;
+        settings: string[];
+        lastContextUpdate: string;
+      } | null;
+      hasRAGData?: boolean;
+    };
+    analysisMode: 'fast' | 'deep';
+    // Legacy format for backward compatibility
+    projectId?: string;
+    basic?: {
       title: string;
       description?: string;
       format: string;
@@ -404,7 +442,7 @@ class APIService {
       contentLength: number;
       wordCount: number;
     };
-    analytics: {
+    analytics?: {
       characters: string[];
       themes: string[];
       contentTypes: string[];
@@ -417,15 +455,15 @@ class APIService {
       averageImportance: number;
       lastUpdated?: string;
     };
-    context: {
+    context?: {
       writingStyle: string;
       toneAnalysis: string;
       settings: string[];
       lastContextUpdate: string;
     } | null;
-    hasRAGData: boolean;
+    hasRAGData?: boolean;
   }> {
-    return this.request<any>(`/ai/analytics/${projectId}`);
+    return this.request<any>(`/ai/analytics/${projectId}?analysisMode=${analysisMode}`);
   }
 
   // Structure Analysis endpoints

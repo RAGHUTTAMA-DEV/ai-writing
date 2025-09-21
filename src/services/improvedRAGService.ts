@@ -1746,128 +1746,7 @@ Return only a simple list of actual character names, one per line. If no clear c
     }
   }
 
-  private applyIntelligentFiltering(results: EnhancedDocument[], filters: FilterOptions): EnhancedDocument[] {
-    return results.filter(doc => {
-      // Basic filters
-      if (filters.projectId && doc.metadata.projectId !== filters.projectId) return false;
-      if (filters.userId && doc.metadata.userId !== filters.userId) return false;
-      if (filters.importance && doc.metadata.importance && doc.metadata.importance < filters.importance) return false;
-
-      // Content type filtering
-      // @ts-ignore
-      if (filters.contentTypes?.length && !filters.contentTypes.includes(doc.metadata.contentType)) return false;
-
-      // Theme filtering with fuzzy matching
-      if (filters.themes?.length) {
-        const hasMatchingTheme = filters.themes.some(filterTheme =>
-          doc.metadata.themes?.some(docTheme =>
-            docTheme.toLowerCase().includes(filterTheme.toLowerCase()) ||
-            filterTheme.toLowerCase().includes(docTheme.toLowerCase())
-          )
-        );
-        if (!hasMatchingTheme) return false;
-      }
-
-      // Character filtering with fuzzy matching
-      if (filters.characters?.length) {
-        const hasMatchingCharacter = filters.characters.some(filterChar =>
-          doc.metadata.characters?.some(docChar =>
-            docChar.toLowerCase().includes(filterChar.toLowerCase()) ||
-            filterChar.toLowerCase().includes(docChar.toLowerCase())
-          )
-        );
-        if (!hasMatchingCharacter) return false;
-      }
-
-      // Time range filtering
-      if (filters.timeRange && doc.metadata.timestamp) {
-        const docTime = new Date(doc.metadata.timestamp);
-        const [start, end] = filters.timeRange;
-        if (docTime < start || docTime > end) return false;
-      }
-
-      return true;
-    });
-  }
-
-  private applyContextualRanking(results: EnhancedDocument[], query: string, projectId?: string): EnhancedDocument[] {
-    const queryLower = query.toLowerCase();
-    const queryTerms = queryLower.split(/\s+/).filter(term => term.length > 2);
-
-    return results
-      .map(doc => {
-        let contextScore = 0;
-
-        // Base relevance from content
-        if (doc.pageContent.toLowerCase().includes(queryLower)) {
-          contextScore += 10;
-        }
-
-        // Term matching
-        queryTerms.forEach(term => {
-          const content = doc.pageContent.toLowerCase();
-          const termCount = (content.match(new RegExp(term, 'g')) || []).length;
-          contextScore += termCount * 2;
-
-          // Metadata matching
-          if (doc.metadata.characters?.some(char => char.toLowerCase().includes(term))) contextScore += 3;
-          if (doc.metadata.themes?.some(theme => theme.toLowerCase().includes(term))) contextScore += 3;
-          if (doc.metadata.semanticTags?.some(tag => tag.toLowerCase().includes(term))) contextScore += 1;
-        });
-
-        // Importance boost
-        contextScore += doc.metadata.importance || 0;
-
-        // Content type relevance
-        if (doc.metadata.contentType === 'dialogue' && queryLower.includes('said')) contextScore += 2;
-
-        return { ...doc, contextScore };
-      })
-      .sort((a, b) => (b.contextScore || 0) - (a.contextScore || 0));
-  }
-
-  private async enrichWithContext(results: EnhancedDocument[]): Promise<EnhancedDocument[]> {
-    return results.map(doc => {
-      const relatedChunks = this.findRelatedChunks(doc.pageContent, doc.metadata.projectId || '');
-      const contextualInfo = this.generateContextualInfo(doc);
-
-      return {
-        ...doc,
-        metadata: {
-          ...doc.metadata,
-          relatedChunks,
-          contextualInfo,
-          enhanced: true
-        }
-      };
-    });
-  }
-
-  private findRelatedChunks(content: string, projectId: string): string[] {
-    const projectDocs = this.getProjectDocuments(projectId);
-    const contentLower = content.toLowerCase();
-    
-    return projectDocs
-      .filter(doc => {
-        const similarity = this.calculateTextSimilarity(content, doc.pageContent);
-        return similarity > 0.3 && doc.pageContent !== content;
-      })
-      .slice(0, 3)
-      .map(doc => doc.pageContent.slice(0, 100) + '...');
-  }
-
-  private generateContextualInfo(doc: EnhancedDocument): any {
-    return {
-      wordCount: doc.metadata.wordCount,
-      estimatedReadingTime: Math.ceil((doc.metadata.wordCount || 0) / 200),
-      contentType: doc.metadata.contentType,
-      importance: doc.metadata.importance,
-      keyElements: {
-        characters: doc.metadata.characters?.slice(0, 3),
-        themes: doc.metadata.themes?.slice(0, 3)
-      }
-    };
-  }
+  
 
   private getProjectDocuments(projectId: string): EnhancedDocument[] {
     return this.documents.filter(doc => doc.metadata.projectId === projectId);
@@ -2011,47 +1890,6 @@ Return only a simple list of actual character names, one per line. If no clear c
     }
   }
 
-  // Utility methods
-  private isCommonWord(word: string): boolean {
-    const commonWords = new Set([
-      // Articles and pronouns
-      'the', 'and', 'but', 'for', 'you', 'all', 'that', 'have', 'her', 'was', 'one', 'our', 'had', 'but', 'not', 'what', 'all', 'were', 'they', 'we', 'when', 'your', 'can', 'said',
-      // Additional pronouns and common words
-      'his', 'him', 'she', 'it', 'them', 'their', 'this', 'that', 'these', 'those', 'he', 'who', 'which', 'where', 'why', 'how',
-      // Common verbs and adjectives
-      'get', 'got', 'see', 'saw', 'come', 'came', 'go', 'went', 'make', 'made', 'take', 'took', 'give', 'gave',
-      // Story structure words
-      'chapter', 'page', 'story', 'book', 'tale', 'scene', 'part', 'section',
-      // Common titles and descriptors
-      'king', 'queen', 'prince', 'princess', 'lord', 'lady', 'sir', 'master', 'mister', 'miss', 'mrs'
-    ]);
-    return commonWords.has(word.toLowerCase());
-  }
-
-  private isLocationWord(word: string): boolean {
-    const locationWords = new Set([
-      // General location words
-      'Street', 'Road', 'Avenue', 'City', 'Town', 'Country', 'State', 'Park', 'School', 'Hospital',
-      // Fantasy/Mythology locations (these are places, not characters)
-      'Midgard', 'Asgard', 'Valhalla', 'Bifrost', 'Jotunheim', 'Alfheim', 'Helheim',
-      // Common fictional location words
-      'Castle', 'Palace', 'Tower', 'Hall', 'Chamber', 'Kingdom', 'Empire', 'Realm', 'World', 'Land', 'Forest', 'Mountain', 'River', 'Sea', 'Ocean'
-    ]);
-    return locationWords.has(word);
-  }
-
-  private isGenericTerm(word: string): boolean {
-    const genericTerms = new Set([
-      // Generic character descriptions
-      'Giant', 'Warrior', 'Soldier', 'Guard', 'Knight', 'Wizard', 'Witch', 'Priest', 'God', 'Goddess',
-      // Generic roles and titles
-      'Father', 'Mother', 'Brother', 'Sister', 'Son', 'Daughter', 'Friend', 'Enemy', 'Stranger',
-      // Common fantasy creatures (generic, not specific names)
-      'Dragon', 'Elf', 'Dwarf', 'Human', 'Orc', 'Goblin', 'Troll', 'Spirit', 'Ghost', 'Demon', 'Angel'
-    ]);
-    return genericTerms.has(word);
-  }
-
   private hashContent(content: string): string {
     return crypto
       .createHash('md5')
@@ -2091,14 +1929,13 @@ Return only a simple list of actual character names, one per line. If no clear c
         if (data.documents && Array.isArray(data.documents)) {
           this.documents = data.documents;
           
-          // Rebuild vector store from persisted documents
           if (this.documents.length > 0) {
             try {
               await this.vectorStore.addDocuments(this.documents);
-              console.log(`📚 Loaded ${this.documents.length} documents into vector store`);
+              console.log(` Loaded ${this.documents.length} documents into vector store`);
             } catch (embedError: any) {
               if (embedError.message?.includes('429') || embedError.message?.includes('quota')) {
-                console.warn('⚠️ Rate limited during data loading, documents available for text search only');
+                console.warn(' Rate limited during data loading, documents available for text search only');
               }
             }
           }

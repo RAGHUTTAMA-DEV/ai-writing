@@ -59,7 +59,6 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
     
     if (!inputMessage.trim() || chatbotLoading) return;
 
-    // Add user message
     const userMessage: ChatMessage = {
       id: Date.now().toString(),
       role: 'user',
@@ -71,7 +70,6 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
     const currentInput = inputMessage;
     setInputMessage('');
 
-    // Add thinking indicator
     const thinkingMessage: ChatMessage = {
       id: 'thinking',
       role: 'bot',
@@ -81,10 +79,8 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
     setMessages(prev => [...prev, thinkingMessage]);
 
     try {
-      // Get AI response
       const aiResponse = await getPersonalizedSuggestions(currentInput, projectId);
       
-      // Remove thinking indicator and add actual response
       setMessages(prev => {
         const newMessages = prev.filter(msg => msg.id !== 'thinking');
         const botResponse: ChatMessage = {
@@ -97,7 +93,6 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
       });
     } catch (error) {
       console.error('Chat error:', error);
-      // Remove thinking indicator and add error message
       setMessages(prev => {
         const newMessages = prev.filter(msg => msg.id !== 'thinking');
         const errorMessage: ChatMessage = {
@@ -119,10 +114,8 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
       const line = lines[i];
       const trimmedLine = line.trim();
       
-      // Skip empty lines
       if (!trimmedLine) continue;
 
-      // Main section headers with emojis (## 📊 TITLE or just ## TITLE)
       if (trimmedLine.match(/^##\s+/)) {
         elements.push(
           <div key={i} className="mb-4 mt-6 first:mt-0">
@@ -158,7 +151,6 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
         continue;
       }
 
-      // Bullet points (- item)
       if (trimmedLine.match(/^-\s+/)) {
         const bulletText = trimmedLine.replace(/^-\s+/, '');
         elements.push(
@@ -192,7 +184,6 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
 
       // Handle special analysis patterns
       if (trimmedLine.includes('**') && !trimmedLine.match(/^\*\*[^*]+\*\*:?\s*$/)) {
-        // Lines with mixed bold content
         elements.push(
           <div key={i} className="text-gray-700 leading-relaxed mb-2 bg-gray-50 p-2 rounded">
             {renderInlineFormatting(trimmedLine)}

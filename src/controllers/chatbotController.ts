@@ -159,7 +159,6 @@ class ChatbotController {
     }
   }
 
-  // Quick answer mode - direct answers without embedding
   async quickAnswer(req: Request, res: Response): Promise<void> {
     try {
       const authReq = req as AuthenticatedRequest;

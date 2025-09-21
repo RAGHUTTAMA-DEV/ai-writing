@@ -3,6 +3,7 @@ import prisma from '../prisma/index';
 import ragService from '../services/ragService';
 import { AuthenticatedRequest } from '../middleware/auth';
 import { aiResponseCache, projectCache } from '../services/cacheService';
+import aiService from '@/services/aiService';
 
 interface CreateProjectRequest {
   title: string;
@@ -281,11 +282,6 @@ const updateProject = async (req: Request, res: Response): Promise<void> => {
     if (content && content !== project?.content) {
       console.log(`🧹 Invalidating AI caches for project ${id} due to content change`);
       
-      // Clear all AI analysis caches for this project
-      // Since we can't easily iterate over cache keys, we'll use a more targeted approach
-      // The content-aware cache keys will automatically change due to content hash change
-      
-      // Clear project context cache to force refresh
       const projectContextKey = `project_context_${id}`;
       projectCache.delete(projectContextKey);
       
@@ -293,7 +289,7 @@ const updateProject = async (req: Request, res: Response): Promise<void> => {
       const projectStatsKey = `project_stats_${id}`;
       projectCache.delete(projectStatsKey);
       
-      console.log(`✅ AI caches invalidated for project ${id}`);
+      console.log(` AI caches invalidated for project ${id}`);
     }
     
     // Update project content in RAG system
@@ -308,24 +304,7 @@ const updateProject = async (req: Request, res: Response): Promise<void> => {
         });
         
         console.log('✅ RAG system updated with new project content');
-        
-        // Auto-update project analytics after saving (async, don't wait)
-        setImmediate(async () => {
-          try {
-            console.log(`📊 Auto-updating analytics for project ${updatedProject.id}...`);
-            
-            // Get or update project analytics from the RAG service  
-            // Note: Using basic analytics update since ragService has limited methods
-            console.log(`📊 Analytics auto-update initiated for project ${updatedProject.id}`);
-            // The RAG service will automatically update analytics when documents are added
-            
-            console.log(`✅ Analytics auto-updated for project ${updatedProject.id}`);
-          } catch (analyticsError) {
-            console.error('Warning: Analytics auto-update failed:', analyticsError);
-            // Don't fail the project update if analytics update fails
-          }
-        });
-        
+
       } catch (error) {
         console.error('Error updating project in RAG system:', error);
         // Don't fail the project update if RAG indexing fails
@@ -360,7 +339,6 @@ const deleteProject = async (req: Request, res: Response): Promise<void> => {
       return;
     }
     
-    // Delete project (cascade delete will remove permissions and versions)
     await prisma.project.delete({
       where: { id }
     });

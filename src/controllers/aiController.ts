@@ -492,10 +492,11 @@ class AIController {
     }
   }
 
-  // Get project analytics for frontend
-  async getProjectAnalytics(req: Request<{ projectId: string }>, res: Response): Promise<void> {
+  // Get project analytics for frontend with fast/slow mode support
+  async getProjectAnalytics(req: Request<{ projectId: string }, {}, {}, { analysisMode?: 'fast' | 'deep' }>, res: Response): Promise<void> {
     try {
       const { projectId } = req.params;
+      const { analysisMode = 'fast' } = req.query;
       const userId = (req as any).user?.id;
 
       if (!projectId) {
@@ -505,7 +506,7 @@ class AIController {
         return;
       }
 
-      console.log(`📊 Fetching analytics for project ${projectId}...`);
+      console.log(`📊 Fetching analytics for project ${projectId} in ${analysisMode} mode...`);
 
       // Verify project ownership
       const project = await prisma.project.findFirst({
@@ -520,53 +521,198 @@ class AIController {
         return;
       }
 
-      // Get project stats and context
-      const projectStats = await improvedRAGService.getProjectStats(projectId);
-      const projectContext = await improvedRAGService.syncProjectContext(projectId);
-      
-      // Get basic project info
-      const basicAnalytics = {
-        title: project.title,
-        description: project.description,
-        format: project.format,
-        type: project.type,
-        createdAt: project.createdAt,
-        updatedAt: project.updatedAt,
-        contentLength: project.content?.length || 0,
-        wordCount: project.content ? project.content.split(/\s+/).length : 0
-      };
+      // Check cache first
+      const cacheKey = await this.createContentAwareCacheKey('analytics', project.content || '', `${analysisMode}:${userId || 'anon'}`, projectId);
+      const cached = aiResponseCache.get(cacheKey);
+      if (cached) {
+        console.log(`📊 Returning cached analytics (${analysisMode} mode)`);
+        res.json({
+          message: `Project analytics retrieved successfully (cached, ${analysisMode} mode)`,
+          summary: cached,
+          analysisMode
+        });
+        return;
+      }
 
-      console.log(`✅ Analytics retrieved for project "${project.title}":`);
-      console.log(`  - Characters found: ${projectStats.characters.length}`);
-      console.log(`  - Themes found: ${projectStats.themes.length}`);
-      console.log(`  - Emotions found: ${projectStats.emotions.length}`);
-      console.log(`  - Plot elements found: ${projectStats.plotElements.length}`);
+      if (analysisMode === 'fast') {
+        // FAST MODE: Direct AI analysis of project content
+        console.log('⚡ FAST MODE: Direct AI content analysis');
+        
+        const basicAnalytics = {
+          projectId,
+          title: project.title,
+          wordCount: project.content ? project.content.split(/\s+/).length : 0,
+          lastAnalyzed: new Date().toISOString(),
+          estimatedReadingTime: project.content ? Math.ceil(project.content.split(/\s+/).length / 200) : 0,
+          estimatedScenes: project.content ? Math.ceil(project.content.split(/\s+/).length / 300) : 0,
+          suggestedChapters: project.content ? Math.ceil(project.content.split(/\s+/).length / 2500) : 0,
+          genre: project.type,
+          writingStyle: 'balanced',
+          recommendations: [
+            project.content && project.content.split(/\s+/).length < 10000 ? 'Consider expanding content for full-length novel' : 'Length is suitable for novel format',
+            'Length is manageable for single volume',
+            'Good foundation for character development'
+          ]
+        };
 
-      res.json({
-        message: 'Project analytics retrieved successfully',
-        projectId,
-        basic: basicAnalytics,
-        analytics: {
-          characters: projectStats.characters,
-          themes: projectStats.themes,
-          contentTypes: projectStats.contentTypes,
-          emotions: projectStats.emotions,
-          plotElements: projectStats.plotElements,
-          semanticTags: projectStats.semanticTags,
-          totalDocuments: projectStats.totalDocuments,
-          totalChunks: projectStats.totalChunks,
-          totalWordCount: projectStats.totalWordCount,
-          averageImportance: projectStats.averageImportance,
-          lastUpdated: projectStats.lastUpdated
-        },
-        context: projectContext ? {
-          writingStyle: projectContext.writingStyle,
-          toneAnalysis: projectContext.toneAnalysis,
-          settings: projectContext.settings,
-          lastContextUpdate: projectContext.lastUpdated
-        } : null,
-        hasRAGData: projectStats.totalDocuments > 0
-      });
+        if (project.content && project.content.length > 0) {
+          // Generate AI-based analytics with direct prompt
+          const analyticsPrompt = `Analyze this story content and extract key information:
+
+"${project.content.slice(0, 2000)}"
+
+Please provide a JSON response with the following structure:
+{
+  "characters": ["character1", "character2", "character3"],
+  "themes": ["theme1", "theme2", "theme3"],
+  "emotions": ["emotion1", "emotion2"],
+  "plotElements": ["event1", "event2"],
+  "writingStyle": "descriptive/concise/dramatic/etc",
+  "genre": "fantasy/scifi/drama/etc"
+}
+
+Focus on:
+- Main characters (people, not places or objects)
+- Central themes and concepts
+- Emotional tones present
+- Key plot events or conflicts
+- Overall writing style and genre
+
+Return only valid JSON.`;
+
+          try {
+            const aiResponse = await aiService.generateStructureAnalysis(analyticsPrompt);
+            let aiAnalytics;
+            
+            try {
+              // Try to parse as JSON
+              aiAnalytics = JSON.parse(aiResponse);
+            } catch (parseError) {
+              console.log('Failed to parse AI response as JSON, using defaults');
+              aiAnalytics = {
+                characters: ['Unable to extract characters'],
+                themes: ['Unable to extract themes'],
+                emotions: [],
+                plotElements: [],
+                writingStyle: 'balanced',
+                genre: project.type || 'fiction'
+              };
+            }
+            
+            const summary = {
+              ...basicAnalytics,
+              characters: aiAnalytics.characters || ['No characters identified'],
+              themes: aiAnalytics.themes || ['No themes identified'],
+              emotions: aiAnalytics.emotions || [],
+              plotElements: aiAnalytics.plotElements || [],
+              writingStyle: aiAnalytics.writingStyle || 'balanced',
+              genre: aiAnalytics.genre || project.type || 'fiction'
+            };
+
+            aiResponseCache.set(cacheKey, summary, 600); // 10 minutes cache
+            
+            res.json({
+              message: `Project analytics retrieved successfully (${analysisMode} mode)`,
+              summary,
+              analysisMode
+            });
+          } catch (aiError) {
+            console.error('AI analysis failed, using basic analytics:', aiError);
+            res.json({
+              message: `Project analytics retrieved successfully (${analysisMode} mode)`,
+              summary: {
+                ...basicAnalytics,
+                characters: ['Unable to analyze characters'],
+                themes: ['Unable to analyze themes']
+              },
+              analysisMode
+            });
+          }
+        } else {
+          res.json({
+            message: `Project analytics retrieved successfully (${analysisMode} mode)`,
+            summary: {
+              ...basicAnalytics,
+              characters: ['No content to analyze'],
+              themes: ['No content to analyze']
+            },
+            analysisMode
+          });
+        }
+      } else {
+        // DEEP MODE: Use comprehensive RAG analysis
+        console.log('🔍 DEEP MODE: Comprehensive RAG-based analysis');
+        
+        // Get project stats and context from RAG
+        const projectStats = await improvedRAGService.getProjectStats(projectId);
+        const projectContext = await improvedRAGService.syncProjectContext(projectId);
+        
+        // Get basic project info
+        const basicAnalytics = {
+          title: project.title,
+          description: project.description,
+          format: project.format,
+          type: project.type,
+          createdAt: project.createdAt,
+          updatedAt: project.updatedAt,
+          contentLength: project.content?.length || 0,
+          wordCount: project.content ? project.content.split(/\s+/).length : 0
+        };
+
+        const summary = {
+          projectId,
+          title: project.title,
+          wordCount: basicAnalytics.wordCount,
+          lastAnalyzed: new Date().toISOString(),
+          estimatedReadingTime: Math.ceil(basicAnalytics.wordCount / 200),
+          estimatedScenes: Math.ceil(basicAnalytics.wordCount / 300),
+          suggestedChapters: Math.ceil(basicAnalytics.wordCount / 2500),
+          genre: project.type,
+          writingStyle: projectContext?.writingStyle || 'balanced',
+          characters: projectStats.characters || ['No characters identified'],
+          themes: projectStats.themes || ['No themes identified'],
+          emotions: projectStats.emotions || [],
+          plotElements: projectStats.plotElements || [],
+          recommendations: [
+            basicAnalytics.wordCount < 10000 ? 'Consider expanding content for full-length novel' : 'Length is suitable for novel format',
+            'Length is manageable for single volume',
+            'Good foundation for character development'
+          ],
+          analytics: {
+            characters: projectStats.characters,
+            themes: projectStats.themes,
+            contentTypes: projectStats.contentTypes,
+            emotions: projectStats.emotions,
+            plotElements: projectStats.plotElements,
+            semanticTags: projectStats.semanticTags,
+            totalDocuments: projectStats.totalDocuments,
+            totalChunks: projectStats.totalChunks,
+            totalWordCount: projectStats.totalWordCount,
+            averageImportance: projectStats.averageImportance,
+            lastUpdated: projectStats.lastUpdated
+          },
+          context: projectContext ? {
+            writingStyle: projectContext.writingStyle,
+            toneAnalysis: projectContext.toneAnalysis,
+            settings: projectContext.settings,
+            lastContextUpdate: projectContext.lastUpdated
+          } : null,
+          hasRAGData: projectStats.totalDocuments > 0
+        };
+
+        aiResponseCache.set(cacheKey, summary, 1800); // 30 minutes cache for deep analysis
+        
+        console.log(`✅ Deep analytics retrieved for project "${project.title}":`);
+        console.log(`  - Characters found: ${projectStats.characters.length}`);
+        console.log(`  - Themes found: ${projectStats.themes.length}`);
+        console.log(`  - Emotions found: ${projectStats.emotions.length}`);
+
+        res.json({
+          message: `Project analytics retrieved successfully (${analysisMode} mode)`,
+          summary,
+          analysisMode
+        });
+      }
     } catch (error) {
       console.error('❌ Error fetching project analytics:', error);
       res.status(500).json({ 

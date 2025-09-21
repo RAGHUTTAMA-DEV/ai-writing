@@ -72,7 +72,6 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
   const [expandedChapters, setExpandedChapters] = useState<Set<number>>(new Set());
   const [analysisType, setAnalysisType] = useState<'none' | 'summary' | 'quick' | 'full'>('none');
 
-  // Load existing structure summary on component mount
   useEffect(() => {
     const loadStructureSummary = async () => {
       if (!projectId || !activeProject) return;
@@ -81,7 +80,6 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
         console.log('📄 Loading structure summary for project:', projectId);
         const response = await apiService.getStructureSummary(projectId);
         
-        // Convert summary to basic structure analysis format
         const basicAnalysis: StructureAnalysis = {
           totalWordCount: response.summary.wordCount || 0,
           suggestedChapterCount: response.summary.suggestedChapters || 0,
@@ -96,10 +94,8 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
         
         setStructureAnalysis(basicAnalysis);
         setAnalysisType('summary');
-        console.log('✅ Structure summary loaded');
       } catch (error) {
         console.log('📄 No existing structure summary found, ready for analysis');
-        // Don't show error for missing summary - it's expected for new projects
       }
     };
     
@@ -113,17 +109,15 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
       setLoading(true);
       setError(null);
       
-      console.log('🔍 Running structure analysis for project:', projectId);
+      console.log(' Running structure analysis for project:', projectId);
       const response = await apiService.analyzeProjectStructure(projectId);
       
-      console.log('📊 Received structure analysis:', response);
-      // The backend returns { message, analysis }
       setStructureAnalysis(response.analysis);
       setAnalysisType('full');
       setActiveTab('overview');
       
     } catch (err: any) {
-      console.error('❌ Structure analysis failed:', err);
+      console.error(' Structure analysis failed:', err);
       setError(err.message || 'Failed to analyze project structure');
     } finally {
       setLoading(false);
@@ -137,18 +131,17 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
       setLoading(true);
       setError(null);
       
-      console.log('🟡 Getting quick chapter suggestions...');
+      console.log('Getting quick chapter suggestions...');
       const response = await apiService.getChapterSuggestions(activeProject.content);
-      
-      console.log('📊 Received quick suggestions:', response);
-      // Map the quick suggestions response to structure analysis format
+
+      console.log('Received quick suggestions:', response);
       const quickAnalysis: StructureAnalysis = {
         totalWordCount: response.contentWordCount,
         suggestedChapterCount: response.suggestedChapters,
         suggestedSceneCount: response.estimatedBreaks?.length || 0,
-        chapters: [], // Quick suggestions don't include detailed chapters
-        overallThemes: [], // Quick suggestions don't include themes
-        mainCharacters: [], // Quick suggestions don't include characters
+        chapters: [], 
+        overallThemes: [],
+        mainCharacters: [],
         narrativeStructure: 'Structure analysis needed',
         pacing: 'Analysis needed',
         recommendations: response.suggestions
@@ -159,7 +152,7 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
       setActiveTab('recommendations');
       
     } catch (err: any) {
-      console.error('❌ Quick suggestions failed:', err);
+      console.error(' Quick suggestions failed:', err);
       setError(err.message || 'Failed to get chapter suggestions');
     } finally {
       setLoading(false);
@@ -232,7 +225,6 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
         </div>
       </div>
 
-      {/* Content */}
       <div className="flex-1 overflow-hidden">
         {loading && (
           <div className="h-full flex items-center justify-center">
@@ -381,7 +373,6 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
                     </Card>
                   </div>
 
-                  {/* Structure Overview */}
                   <Card>
                     <CardHeader>
                       <CardTitle className="flex items-center space-x-2">
@@ -407,7 +398,6 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
                     </CardContent>
                   </Card>
 
-                  {/* Characters & Themes Summary */}
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <Card>
                       <CardHeader>
@@ -468,8 +458,6 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
                     </Card>
                   </div>
                 </TabsContent>
-
-                {/* Chapters Tab */}
                 <TabsContent value="chapters" className="space-y-4">
                   {structureAnalysis.chapters.length > 0 ? (
                     <div className="space-y-4">
@@ -504,13 +492,11 @@ export const StructureAnalysisPanel: React.FC<StructureAnalysisPanelProps> = ({ 
 
                           {expandedChapters.has(chapter.chapterNumber) && (
                             <CardContent className="space-y-4">
-                              {/* Chapter Summary */}
                               <div>
                                 <h4 className="text-sm font-medium text-gray-700 mb-2">Summary</h4>
                                 <p className="text-sm text-gray-600">{chapter.summary}</p>
                               </div>
 
-                              {/* Chapter Details */}
                               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                 <div>
                                   <h4 className="text-sm font-medium text-gray-700 mb-2">Characters</h4>

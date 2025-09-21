@@ -25,7 +25,46 @@ interface AnalyticsPanelProps {
 }
 
 interface ProjectAnalytics {
-  basic: {
+  message: string;
+  analysisMode: 'fast' | 'deep';
+  summary?: {
+    projectId: string;
+    title: string;
+    wordCount: number;
+    lastAnalyzed: string;
+    estimatedReadingTime: number;
+    estimatedScenes: number;
+    suggestedChapters: number;
+    genre: string | null;
+    writingStyle: string;
+    characters: string[];
+    themes: string[];
+    emotions?: string[];
+    plotElements?: string[];
+    recommendations: string[];
+    analytics?: {
+      characters: string[];
+      themes: string[];
+      contentTypes: string[];
+      emotions: string[];
+      plotElements: string[];
+      semanticTags: string[];
+      totalDocuments: number;
+      totalChunks: number;
+      totalWordCount: number;
+      averageImportance: number;
+      lastUpdated?: string;
+    };
+    context?: {
+      writingStyle: string;
+      toneAnalysis: string;
+      settings: string[];
+      lastContextUpdate: string;
+    } | null;
+    hasRAGData?: boolean;
+  };
+  // Legacy support for old format
+  basic?: {
     title: string;
     description?: string;
     format: string;
@@ -35,7 +74,7 @@ interface ProjectAnalytics {
     contentLength: number;
     wordCount: number;
   };
-  analytics: {
+  analytics?: {
     characters: string[];
     themes: string[];
     contentTypes: string[];
@@ -48,13 +87,13 @@ interface ProjectAnalytics {
     averageImportance: number;
     lastUpdated?: string;
   };
-  context: {
+  context?: {
     writingStyle: string;
     toneAnalysis: string;
     settings: string[];
     lastContextUpdate: string;
   } | null;
-  hasRAGData: boolean;
+  hasRAGData?: boolean;
 }
 
 export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => {
@@ -62,14 +101,15 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('overview');
+  const [analysisMode, setAnalysisMode] = useState<'fast' | 'deep'>('fast');
 
-  const loadAnalytics = async () => {
+  const loadAnalytics = async (mode: 'fast' | 'deep' = analysisMode) => {
     try {
       setLoading(true);
       setError(null);
-      console.log('📊 Loading analytics for project:', projectId);
+      console.log(`📊 Loading analytics for project: ${projectId} in ${mode} mode`);
       
-      const data = await apiService.getProjectAnalytics(projectId);
+      const data = await apiService.getProjectAnalytics(projectId, mode);
       console.log('✅ Analytics loaded:', data);
       
       setAnalytics(data);
@@ -80,6 +120,28 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
       setLoading(false);
     }
   };
+
+  const handleModeChange = (mode: 'fast' | 'deep') => {
+    setAnalysisMode(mode);
+    loadAnalytics(mode);
+  };
+
+  const handleRefresh = () => {
+    loadAnalytics();
+  };
+
+  // Helper functions to safely access data from both new and legacy formats
+  const getTitle = () => analytics?.summary?.title || analytics?.basic?.title || 'Unknown Project';
+  const getWordCount = () => analytics?.summary?.wordCount || analytics?.basic?.wordCount || 0;
+  const getCharacters = () => analytics?.summary?.characters || analytics?.analytics?.characters || [];
+  const getThemes = () => analytics?.summary?.themes || analytics?.analytics?.themes || [];
+  const getEmotions = () => analytics?.summary?.emotions || analytics?.analytics?.emotions || [];
+  const getPlotElements = () => analytics?.summary?.plotElements || analytics?.analytics?.plotElements || [];
+  const getRecommendations = () => analytics?.summary?.recommendations || [];
+  const getFormat = () => analytics?.basic?.format || 'Unknown';
+  const getType = () => analytics?.basic?.type || analytics?.summary?.genre || 'Unknown';
+  const getEstimatedReadingTime = () => analytics?.summary?.estimatedReadingTime || Math.ceil(getWordCount() / 200);
+  const getSuggestedChapters = () => analytics?.summary?.suggestedChapters || Math.ceil(getWordCount() / 2500);
 
   useEffect(() => {
     if (projectId) {
@@ -106,6 +168,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
             <div className="text-red-500 mb-2">❌</div>
             <h3 className="text-lg font-semibold text-gray-900 mb-2">Error Loading Analytics</h3>
             <p className="text-gray-600 mb-4">{error}</p>
+            
             <Button onClick={loadAnalytics} variant="outline">
               <RefreshCw className="w-4 h-4 mr-2" />
               Retry
@@ -133,11 +196,39 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
         <div className="flex items-center space-x-2">
           <BarChart3 className="h-5 w-5 text-blue-600" />
           <h2 className="text-lg font-semibold text-gray-900">Project Analytics</h2>
+          <span className="text-xs bg-blue-100 text-blue-700 px-2 py-1 rounded-full">
+            {analytics.analysisMode === 'fast' ? '⚡ Fast Mode' : '🔍 Deep Mode'}
+          </span>
         </div>
-        <Button onClick={loadAnalytics} variant="outline" size="sm">
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Refresh Data
-        </Button>
+        <div className="flex items-center space-x-2">
+          {/* Mode Toggle */}
+          <div className="flex items-center space-x-1 bg-white rounded-md p-1">
+            <button
+              onClick={() => handleModeChange('fast')}
+              className={`px-3 py-1 text-xs rounded transition-colors ${
+                analysisMode === 'fast'
+                  ? 'bg-blue-500 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              ⚡ Fast
+            </button>
+            <button
+              onClick={() => handleModeChange('deep')}
+              className={`px-3 py-1 text-xs rounded transition-colors ${
+                analysisMode === 'deep'
+                  ? 'bg-purple-500 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              🔍 Deep
+            </button>
+          </div>
+          <Button onClick={handleRefresh} variant="outline" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh Data
+          </Button>
+        </div>
       </div>
 
       {/* Tabbed Content */}
@@ -214,7 +305,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Total Words</p>
-                <p className="text-2xl font-bold text-gray-900">{analytics.basic.wordCount.toLocaleString()}</p>
+                <p className="text-2xl font-bold text-gray-900">{getWordCount().toLocaleString()}</p>
               </div>
               <FileText className="w-8 h-8 text-blue-500" />
             </div>
@@ -226,7 +317,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Characters</p>
-                <p className="text-2xl font-bold text-gray-900">{analytics.analytics.characters.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{getCharacters().length}</p>
               </div>
               <Users className="w-8 h-8 text-green-500" />
             </div>
@@ -238,7 +329,7 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm font-medium text-gray-600">Themes</p>
-                <p className="text-2xl font-bold text-gray-900">{analytics.analytics.themes.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{getThemes().length}</p>
               </div>
               <Target className="w-8 h-8 text-orange-500" />
             </div>
@@ -264,13 +355,13 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center space-x-2">
               <Users className="h-5 w-5 text-blue-600" />
-              <span>Characters ({analytics.analytics.characters.length})</span>
+              <span>Characters ({getCharacters().length})</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {analytics.analytics.characters.length > 0 ? (
+            {getCharacters().length > 0 ? (
               <div className="space-y-2">
-                {analytics.analytics.characters.slice(0, 8).map((character, index) => (
+                {getCharacters().slice(0, 8).map((character, index) => (
                   <div key={character} className="flex items-center justify-between">
                     <span className="text-sm text-gray-700">{character}</span>
                     <Badge variant="secondary" className="text-xs">
@@ -278,9 +369,9 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
                     </Badge>
                   </div>
                 ))}
-                {analytics.analytics.characters.length > 8 && (
+                {getCharacters().length > 8 && (
                   <p className="text-xs text-gray-500 mt-2">
-                    +{analytics.analytics.characters.length - 8} more characters
+                    +{getCharacters().length - 8} more characters
                   </p>
                 )}
               </div>
@@ -297,13 +388,13 @@ export const AnalyticsPanel: React.FC<AnalyticsPanelProps> = ({ projectId }) => 
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center space-x-2">
               <Target className="h-5 w-5 text-orange-600" />
-              <span>Themes ({analytics.analytics.themes.length})</span>
+              <span>Themes ({getThemes().length})</span>
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {analytics.analytics.themes.length > 0 ? (
+            {getThemes().length > 0 ? (
               <div className="flex flex-wrap gap-1">
-                {analytics.analytics.themes.map((theme) => (
+                {getThemes().map((theme) => (
                   <Badge key={theme} variant="outline" className="text-xs">
                     {theme}
                   </Badge>
