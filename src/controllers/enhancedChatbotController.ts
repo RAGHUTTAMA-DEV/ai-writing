@@ -9,7 +9,7 @@ const improvedRAGService = new ImprovedRAGService();
 // Get personalized suggestions based on context and user preferences
 export const getPersonalizedSuggestions = async (req: Request, res: Response): Promise<void> => {
   try {
-    const { context, projectId } = req.body;
+    const { context, projectId, analysisMode = 'fast' } = req.body;
     const userId = (req as any).user?.id;
 
     if (!context) {
@@ -25,13 +25,15 @@ export const getPersonalizedSuggestions = async (req: Request, res: Response): P
     console.log('🤖 Generating personalized suggestions for context:', context.substring(0, 100));
     console.log('🤖 User ID:', userId);
     console.log('🤖 Project ID:', projectId);
+    console.log('🤖 Analysis Mode:', analysisMode);
 
     // Generate intelligent response using AI service
     const suggestions = await aiService.generateIntelligentResponse(
       context, 
       userId, 
       projectId && projectId !== 'default' ? projectId : undefined, // Only pass valid project IDs
-      context
+      context,
+      analysisMode // Pass the analysis mode to AI service
     );
 
     console.log('🤖 AI response received, length:', suggestions?.length || 0);

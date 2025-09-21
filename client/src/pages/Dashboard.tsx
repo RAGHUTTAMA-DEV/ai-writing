@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+  import React, { useState, useEffect } from 'react';
 import { useProjectStore } from '../store/useProjectStore';
 import { CopilotEditor } from '../components/CopilotEditor';
 import { AIToolsPanel } from '../components/AI/AIToolsPanel';
@@ -269,7 +269,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
               <span className={`
                 text-sm font-semibold truncate transition-all duration-300
                 ${isSidebarCollapsed 
-                  ? 'opacity-0 md:group-hover:opacity-100 absolute left-full ml-3 bg-gray-900/95 backdrop-blur-sm text-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-[9999] pointer-events-none border border-gray-700 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-gray-900/95 hidden md:block' 
+                  ? 'opacity-0 md:group-hover:opacity-100 absolute left-full ml-3 bg-blue-300 text-white px-3 py-2 rounded-lg shadow-2xl whitespace-nowrap z-[99999] pointer-events-none border-2 border-white/20 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-black hidden md:block' 
                   : 'block lg:block'
                 }
                 ${activeTab === item.id && !isSidebarCollapsed ? 'text-white' : 'text-gray-700 group-hover:text-gray-800'}
@@ -302,7 +302,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ initialTab }) => {
             
             {/* Collapsed state tooltip */}
             {isSidebarCollapsed && (
-              <div className="hidden md:block opacity-0 group-hover:opacity-100 absolute left-full ml-3 bg-gray-900/95 backdrop-blur-sm text-white px-3 py-2 rounded-lg shadow-xl whitespace-nowrap z-[9999] pointer-events-none border border-gray-700 transition-opacity duration-300 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-gray-900/95">
+              <div className="hidden md:block opacity-0 group-hover:opacity-100 absolute left-full ml-3 bg-black text-white px-3 py-2 rounded-lg shadow-2xl whitespace-nowrap z-[99999] pointer-events-none border-2 border-white/20 transition-opacity duration-300 before:absolute before:top-1/2 before:-left-1 before:-translate-y-1/2 before:border-4 before:border-transparent before:border-r-black">
                 <p className="text-sm font-medium">{activeProject.title}</p>
                 <p className="text-xs text-gray-300">
                   {(activeProject.content || '').split(/\s+/).filter(word => word.length > 0).length} words

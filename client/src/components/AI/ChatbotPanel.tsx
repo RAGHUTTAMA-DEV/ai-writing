@@ -33,6 +33,7 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
     clearError: clearChatbotError
   } = useChatbotStore();
 
+  const [analysisMode, setAnalysisMode] = useState<'fast' | 'deep'>('fast');
   const [messages, setMessages] = useState<ChatMessage[]>([
     {
       id: '1',
@@ -79,7 +80,7 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
     setMessages(prev => [...prev, thinkingMessage]);
 
     try {
-      const aiResponse = await getPersonalizedSuggestions(currentInput, projectId);
+      const aiResponse = await getPersonalizedSuggestions(currentInput, projectId, analysisMode);
       
       setMessages(prev => {
         const newMessages = prev.filter(msg => msg.id !== 'thinking');
@@ -223,12 +224,12 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
   };
 
   const quickPrompts = [
+    "Who are the main characters in my story?",
+    "What themes are present in my story?",
     "Help me develop my main character",
     "Suggest plot twists for my story",
     "How can I improve my dialogue?",
-    "What themes should I explore?",
-    "Help me write a compelling opening",
-    "Suggest ways to build tension"
+    "Help me write a compelling opening"
   ];
 
   const handleQuickPrompt = (prompt: string) => {
@@ -243,9 +244,34 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
           <Brain className="h-4 w-4 text-purple-600" />
           <span className="font-medium text-sm">AI Chat</span>
         </div>
-        <Badge variant="outline" className="text-xs py-0 px-2">
-          Context-Aware
-        </Badge>
+        <div className="flex items-center space-x-2">
+          {/* Mode Toggle */}
+          <div className="flex bg-white border rounded-md p-0.5">
+            <button
+              onClick={() => setAnalysisMode('fast')}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                analysisMode === 'fast'
+                  ? 'bg-green-500 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              ⚡ Fast
+            </button>
+            <button
+              onClick={() => setAnalysisMode('deep')}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                analysisMode === 'deep'
+                  ? 'bg-purple-500 text-white'
+                  : 'text-gray-600 hover:bg-gray-100'
+              }`}
+            >
+              🔍 Deep
+            </button>
+          </div>
+          <Badge variant="outline" className="text-xs py-0 px-2">
+            Context-Aware
+          </Badge>
+        </div>
       </div>
 
       {/* Chat Messages */}
@@ -383,7 +409,7 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
           <div className="text-sm text-gray-600">
             <div className="flex items-center space-x-2 mb-2">
               <Sparkles className="w-4 h-4 text-purple-600" />
-              <span className="font-medium">AI Features Active:</span>
+              <span className="font-medium">AI Features Active ({analysisMode.toUpperCase()} Mode):</span>
             </div>
             <div className="grid grid-cols-2 gap-2 text-xs">
               <div className="flex items-center space-x-1">
@@ -396,12 +422,18 @@ export const ChatbotPanel: React.FC<ChatbotPanelProps> = ({ projectId }) => {
               </div>
               <div className="flex items-center space-x-1">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                <span>Theme Analysis</span>
+                <span>{analysisMode === 'fast' ? 'Full Story Access' : 'Deep RAG Analysis'}</span>
               </div>
               <div className="flex items-center space-x-1">
                 <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                 <span>Writing History</span>
               </div>
+            </div>
+            <div className="mt-2 text-xs text-gray-500">
+              {analysisMode === 'fast' 
+                ? '⚡ Fast mode: Direct access to your story content for instant answers'
+                : '🔍 Deep mode: Advanced RAG analysis with comprehensive context search'
+              }
             </div>
           </div>
         </CardContent>

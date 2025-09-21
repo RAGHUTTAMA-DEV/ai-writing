@@ -15,7 +15,7 @@ interface ChatbotState {
   submitWritingFlowAnswers: (answers: Record<string, string>) => Promise<void>;
   getUserPreferences: () => Promise<void>;
   updateUserPreferences: (preferences: UserPreferences) => Promise<void>;
-  getPersonalizedSuggestions: (context: string, projectId?: string) => Promise<string>;
+  getPersonalizedSuggestions: (context: string, projectId?: string, analysisMode?: 'fast' | 'deep') => Promise<string>;
   setPreferences: (preferences: UserPreferences) => void;
   addSuggestion: (suggestion: string) => void;
   clearSuggestions: () => void;
@@ -102,12 +102,13 @@ export const useChatbotStore = create<ChatbotState>()((set) => ({
     }
   },
 
-  getPersonalizedSuggestions: async (context: string, projectId?: string) => {
+  getPersonalizedSuggestions: async (context: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast') => {
     try {
       set({ loading: true, error: null });
       console.log('🤖 Requesting personalized suggestions with context:', context.substring(0, 100));
+      console.log('🤖 Analysis mode:', analysisMode);
       
-      const response = await apiService.getPersonalizedSuggestions(context, projectId);
+      const response = await apiService.getPersonalizedSuggestions(context, projectId, analysisMode);
       console.log('🤖 Received response:', response);
       
       if (!response || !response.suggestions) {

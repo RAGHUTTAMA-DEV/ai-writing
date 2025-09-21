@@ -331,10 +331,10 @@ class APIService {
   }
 
   // Enhanced Chatbot endpoints
-  async getPersonalizedSuggestions(context: string, projectId?: string): Promise<ChatbotSuggestionResponse> {
+  async getPersonalizedSuggestions(context: string, projectId?: string, analysisMode: 'fast' | 'deep' = 'fast'): Promise<ChatbotSuggestionResponse> {
     return this.request<ChatbotSuggestionResponse>('/enhanced-chatbot/suggestions', {
       method: 'POST',
-      body: JSON.stringify({ context, projectId }),
+      body: JSON.stringify({ context, projectId, analysisMode }),
     });
   }
 

@@ -1320,7 +1320,8 @@ Please provide a comprehensive foreshadowing analysis with the following structu
       userInput: string,
       userId: string,
       projectId?: string,
-      context?: string
+      context?: string,
+      analysisMode: 'fast' | 'deep' = 'fast'
     ): Promise<string> {
       if (!this.model) {
         return 'AI features are not available due to missing API key configuration.';
@@ -1334,7 +1335,12 @@ Please provide a comprehensive foreshadowing analysis with the following structu
         const memory = await this.getConversationMemory(userId, projectId);
         const projectContext = projectId ? await improvedRAGService.syncProjectContext(projectId) : null;
         
-        // Route to appropriate handler based on intent
+        // For fast mode with project ID, handle all queries as context-aware responses
+        if (analysisMode === 'fast' && projectId) {
+          return this.handleFastModeQuery(userInput, userId, projectId, context);
+        }
+        
+        // Route to appropriate handler based on intent for deep mode
         switch (intent.type) {
           case 'writing_help':
             return this.handleWritingHelp(userInput, userId, projectId, context);
@@ -1517,6 +1523,59 @@ Please provide a comprehensive foreshadowing analysis with the following structu
         'Brainstorming'
       );
       return response.content as string;
+    }
+
+    // Fast mode query handler with full story content
+    private async handleFastModeQuery(userInput: string, userId: string, projectId: string, context?: string): Promise<string> {
+      try {
+        // Get the full project content
+        const project = await (prisma as any).project.findUnique({
+          where: { id: projectId }
+        });
+
+        if (!project || !project.content) {
+          return this.handleGeneralQuery(userInput, userId, projectId, context);
+        }
+
+        const memory = await this.getConversationMemory(userId, projectId);
+        const recentContext = memory.messages.slice(-3).map(m => `${m.role}: ${m.content}`).join('\n');
+
+        // Create a focused prompt that answers the specific question using the full story
+        const prompt = `
+          You are an expert writing assistant analyzing a story to answer the user's specific question.
+          
+          USER QUESTION: "${userInput}"
+          
+          FULL STORY CONTENT:
+          "${project.content.slice(0, 2000)}"
+          ${project.content.length > 2000 ? '\n... [Story continues beyond excerpt]' : ''}
+          
+          ${recentContext ? `RECENT CONVERSATION:\n${recentContext}\n` : ''}
+          
+          INSTRUCTIONS:
+          1. Answer the user's question directly and specifically
+          2. Provide evidence from the story to support your answer
+          3. Include relevant quotes or examples from the text
+          4. If the question is about characters, themes, plot, etc., analyze the actual story content
+          5. Be thorough but focused on answering their specific question
+          
+          Provide a detailed, evidence-based response that directly addresses: "${userInput}"
+        `;
+
+        const response = await trackAICall(
+          () => this.callWithTimeout(this.model.invoke(prompt), 'Fast Mode Query'),
+          'Fast Mode Query'
+        );
+        
+        // Update conversation memory
+        await this.updateConversationMemory(userId, projectId, 'user', userInput, context);
+        await this.updateConversationMemory(userId, projectId, 'assistant', response.content as string);
+        
+        return response.content as string;
+      } catch (error) {
+        console.error('Error in fast mode query:', error);
+        return this.handleGeneralQuery(userInput, userId, projectId, context);
+      }
     }
 
     private async handleGeneralQuery(userInput: string, userId: string, projectId?: string, context?: string): Promise<string> {
